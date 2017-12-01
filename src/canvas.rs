@@ -33,11 +33,13 @@ fn compute_projection_matrix(x: i32, y: i32, w: u32, h: u32, zoom_level: f32) ->
     debug_assert!(zoom_level > 0.0);
     let x = x as f32;
     let y = y as f32;
+    let camera_half_w = (w as f32) / 2.0;
+    let camera_half_h = (h as f32) / 2.0;
     Matrix4::<f32>::from(Ortho {
-        left: (x - (w as f32) / 2.0) / zoom_level,
-        right: (x + (w as f32) / 2.0) / zoom_level,
-        bottom: (y + (h as f32) / 2.0) / zoom_level,
-        top: (y - (h as f32) / 2.0) / zoom_level,
+        left: (x - camera_half_w / zoom_level),
+        right: (x + camera_half_w / zoom_level),
+        bottom: (y + camera_half_h / zoom_level),
+        top: (y - camera_half_h / zoom_level),
         near: -1.0,
         far: 1.0
     })
@@ -55,12 +57,10 @@ pub enum CameraRelativePosition<T: ::std::fmt::Debug + Clone + Copy> {
 pub enum Graphic2DRepresentation<T: ::std::fmt::Debug + Clone + Copy> {
     CameraRelative {
         position: CameraRelativePosition<T>,
-        scale: Option<f32>,
     },
     WorldAbsolute {
         x: T,
         y: T,
-        scale: Option<f32>
     }
 }
 
@@ -69,10 +69,12 @@ pub enum GraphicEntity<'a> {
         /// The ID that was returned by add_texture_*
         id: u32,
         repr: Graphic2DRepresentation<i32>,
-        render_options: RenderOptions
+        render_options: RenderOptions,
+        scale: Option<f32>
     },
     Text {
         font_id: u32,
+        font_size: f32,
         text: &'a str,
         repr: Graphic2DRepresentation<i32>,
         render_options: RenderOptions
@@ -280,56 +282,54 @@ impl Canvas {
         Matrix4::from_nonuniform_scale(width, height, 1.0)
     }
 
-    fn compute_model_matrix_from_2d_repr(&self, pos: &Graphic2DRepresentation<i32>, element_dims: (u32, u32)) -> Matrix4<f32> {
+    fn compute_model_matrix_from_2d_repr(&self, pos: &Graphic2DRepresentation<i32>, element_dims: (u32, u32), scale: Option<f32>) -> Matrix4<f32> {
         use CameraRelativePosition::*;
         use Graphic2DRepresentation::*;
-        let elt_w = element_dims.0 as f32;
-        let elt_h = element_dims.1 as f32;
+        let elt_w = element_dims.0 as f32 * scale.unwrap_or(1.0);
+        let elt_h = element_dims.1 as f32 * scale.unwrap_or(1.0);
         let cam_center_x = self.camera_bounds.0 as f32;
         let cam_center_y = self.camera_bounds.1 as f32;
-        let cam_w = self.camera_bounds.2 as f32;
-        let cam_h = self.camera_bounds.3 as f32;
+        let cam_w = self.camera_bounds.2 as f32 / self.zoom_level;
+        let cam_h = self.camera_bounds.3 as f32 / self.zoom_level;
         match pos {
-            &WorldAbsolute {x, y, scale} =>
-                Self::compute_model_matrix(x as f32, y as f32, elt_w * scale.unwrap_or(1.0), elt_h * scale.unwrap_or(1.0)),
-            &CameraRelative {ref position, scale} => {
-                let real_elt_w = elt_w * scale.unwrap_or(1.0);
-                let real_elt_h = elt_h * scale.unwrap_or(1.0);
+            &WorldAbsolute {x, y} =>
+                Self::compute_model_matrix(x as f32, y as f32, elt_w, elt_h),
+            &CameraRelative {ref position} => {
                 match position {
                     &FromTopLeft(x, y) =>
                         Self::compute_model_matrix(
-                            ((cam_center_x - cam_w / 2.0) + x as f32) / self.zoom_level,
-                            ((cam_center_y - cam_h / 2.0) + y as f32) / self.zoom_level,
-                            real_elt_w / self.zoom_level,
-                            real_elt_h / self.zoom_level,
+                            ((cam_center_x - cam_w / 2.0) + (x as f32) / self.zoom_level),
+                            ((cam_center_y - cam_h / 2.0) + (y as f32) / self.zoom_level),
+                            elt_w / self.zoom_level,
+                            elt_h / self.zoom_level,
                         ),
                     &FromBottomLeft(x, y) =>
                         Self::compute_model_matrix(
-                            ((cam_center_x - cam_w / 2.0) + x as f32) / self.zoom_level,
-                            ((cam_center_y + cam_h / 2.0) - y as f32 - real_elt_h) / self.zoom_level,
-                            real_elt_w / self.zoom_level,
-                            real_elt_h / self.zoom_level,
+                            ((cam_center_x - cam_w / 2.0) + x as f32 / self.zoom_level),
+                            ((cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
+                            elt_w / self.zoom_level,
+                            elt_h / self.zoom_level,
                         ),
                     &FromBottomRight(x, y) =>
                         Self::compute_model_matrix(
-                            ((cam_center_x + cam_w / 2.0) - x as f32 - real_elt_w) / self.zoom_level,
-                            ((cam_center_y + cam_h / 2.0) - y as f32 - real_elt_h) / self.zoom_level,
-                            real_elt_w / self.zoom_level,
-                            real_elt_h / self.zoom_level,
+                            ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level),
+                            ((cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
+                            elt_w / self.zoom_level,
+                            elt_h / self.zoom_level,
                         ),
                     &FromTopRight(x, y) =>
                         Self::compute_model_matrix(
-                            ((cam_center_x + cam_w / 2.0) - x as f32- real_elt_w) / self.zoom_level,
-                            ((cam_center_y - cam_h / 2.0) + y as f32) / self.zoom_level,
-                            real_elt_w / self.zoom_level,
-                            real_elt_h / self.zoom_level,
+                            ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level),
+                            ((cam_center_y - cam_h / 2.0) + y as f32 / self.zoom_level),
+                            elt_w / self.zoom_level,
+                            elt_h / self.zoom_level,
                         ),
                 }
             }
         }
     }
 
-    fn draw_texture_from_id(&mut self, texture_id: u32, model: &Matrix4<f32>, render_options: &RenderOptions) {
+    fn draw_texture_from_id(&mut self, texture_id: u32, model: &Matrix4<f32>, render_options: &RenderOptions, scale: Option<f32>) {
         let texture = &self.textures[&texture_id];
         let texture_dims = texture.size();
         self.shader.set_matrix4(UniformName::Model, &model, false);
@@ -358,7 +358,7 @@ impl Canvas {
         texture.bind();
 
         unsafe {
-            // TODO optimize and only make this call once?
+            // TODO optimize and only make this call once across all draws?
             gl::BindVertexArray(self.quad_vao);
             gl::DrawArrays(gl::TRIANGLES, 0, 6);
             gl::BindVertexArray(0);
@@ -376,18 +376,22 @@ impl Canvas {
         }
     }
 
+    fn draw_text(&mut self, font_id: u32, font_size: f32, text: &str, repr: &Graphic2DRepresentation<i32>, options: &RenderOptions) {
+        unimplemented!()
+    }
+
     fn draw_graphic_entity<'a>(&mut self, graphic_entity: &GraphicEntity<'a>) {
         match graphic_entity {
-            &GraphicEntity::Texture {id, ref repr, ref render_options} => {
+            &GraphicEntity::Texture {id, ref repr, ref render_options, scale} => {
                 let model = {
                     let texture = &self.textures[&id];
                     let texture_dims = texture.size();
-                    self.compute_model_matrix_from_2d_repr(repr, texture_dims)
+                    self.compute_model_matrix_from_2d_repr(repr, texture_dims, scale)
                 };
-                self.draw_texture_from_id(id, &model, render_options);
+                self.draw_texture_from_id(id, &model, render_options, scale);
             },
-            &GraphicEntity::Text {font_id, text, ref repr, ref render_options} => {
-                unimplemented!()
+            &GraphicEntity::Text {font_id, font_size, text, ref repr, ref render_options} => {
+                self.draw_text(font_id, font_size, text, repr, render_options);
             }
         }
     }

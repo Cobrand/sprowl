@@ -55,47 +55,47 @@ fn main() {
                 repr: Graphic2DRepresentation::WorldAbsolute {
                     x: 0,
                     y: 0,
-                    scale: Some(0.10)
                 },
                 render_options: RenderOptions {
                     filter_color: None,
                     blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
                     outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
-                }
+                },
+                scale: Some(0.1)
             },
             GraphicEntity::Texture {
                 id: stick_id,
                 repr: Graphic2DRepresentation::WorldAbsolute {
                     x: entity_x,
                     y: entity_y,
-                    scale: None
                 },
                 render_options: RenderOptions {
                     filter_color: None,
                     blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
                     outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
-                }
+                },
+                scale: None,
             },
             GraphicEntity::Texture {
                 id: stick_id,
                 repr: Graphic2DRepresentation::WorldAbsolute {
                     x: 10,
                     y: 10,
-                    scale: None
                 },
                 render_options: RenderOptions {
                     filter_color: None,
                     blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
                     outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
-                }
+                },
+                scale: None,
             },
             GraphicEntity::Texture {
                 id: stick_id,
                 repr: Graphic2DRepresentation::CameraRelative {
                     position: CameraRelativePosition::FromBottomLeft(10, 10),
-                    scale: Some(0.5)
                 },
-                render_options: Default::default()
+                render_options: Default::default(),
+                scale: None
             },
         );
         canvas.draw(&graphic_entities);
