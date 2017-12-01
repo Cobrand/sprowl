@@ -1,13 +1,16 @@
 pub trait ColorType: ::std::fmt::Debug + Clone + Copy {
     const COLOR_MAX_VALUE: Self;
+    const COLOR_MIN_VALUE: Self;
 }
 
 impl ColorType for u8 {
     const COLOR_MAX_VALUE: u8 = 255;
+    const COLOR_MIN_VALUE: u8 = 0;
 }
 
 impl ColorType for f32 {
     const COLOR_MAX_VALUE: f32 = 1.0f32;
+    const COLOR_MIN_VALUE: f32 = 0.0f32;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -33,6 +36,14 @@ impl<T: ColorType> Color<T> {
 
     pub fn rgba(self) -> (T, T, T, T) {
         (self.r, self.g, self.b, self.a)
+    }
+
+    pub fn white() -> Color<T> {
+        Color {r: T::COLOR_MAX_VALUE, g: T::COLOR_MAX_VALUE, b: T::COLOR_MAX_VALUE, a: T::COLOR_MAX_VALUE}
+    }
+    
+    pub fn black() -> Color<T> {
+        Color {r: T::COLOR_MIN_VALUE, g: T::COLOR_MIN_VALUE, b: T::COLOR_MIN_VALUE, a: T::COLOR_MAX_VALUE}
     }
 }
 

@@ -38,8 +38,9 @@ fn main() {
     };
 
     let stick_id = canvas.add_texture_from_image_path("res/stick.png").unwrap();
+    let font_id = canvas.add_font_from_bytes(include_bytes!("/usr/share/fonts/TTF/DejaVuSansMono.ttf"));
     let mut event_pump = sdl_context.event_pump().unwrap();
-    
+
     let mut entity_x: i32 = 500;
     let mut entity_y: i32 = 500;
     'running: loop {
@@ -96,6 +97,16 @@ fn main() {
                 },
                 render_options: Default::default(),
                 scale: None
+            },
+            GraphicEntity::Text {
+                font_id: font_id,
+                repr: Graphic2DRepresentation::CameraRelative {
+                    position: CameraRelativePosition::FromTopRight(10, 10),
+                },
+                render_options: Default::default(),
+                text: "Pote",
+                font_size: 30.0,
+                color: None,
             },
         );
         canvas.draw(&graphic_entities);

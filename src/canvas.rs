@@ -3,8 +3,9 @@ use super::texture::Texture2D;
 use cgmath::prelude::*;
 use cgmath::{Matrix4, Vector2, Vector3, Vector4, Ortho};
 
-use image::{self, GenericImage};
-use rusttype::Font;
+use rusttype::{PositionedGlyph, FontCollection, Font, Scale as FontScale};
+use image::{self, GenericImage, ImageBuffer, RgbaImage, Rgba, Pixel};
+
 use std::path::Path;
 use fnv::FnvHashMap as HashMap;
 use super::texture::*;
@@ -76,6 +77,7 @@ pub enum GraphicEntity<'a> {
         font_id: u32,
         font_size: f32,
         text: &'a str,
+        color: Option<Color<u8>>,
         repr: Graphic2DRepresentation<i32>,
         render_options: RenderOptions
     }
@@ -162,8 +164,8 @@ impl Canvas {
         let texture = Texture2D::from_bytes(bytes, size);
         let _v = self.textures.insert(self.current_texture_id, texture);
         debug_assert_eq!(_v, None);
-        let texture_id = self.current_font_id;
-        self.current_font_id += 1;
+        let texture_id = self.current_texture_id;
+        self.current_texture_id += 1;
         texture_id
     }
 
@@ -197,15 +199,14 @@ impl Canvas {
     /// # Panics
     ///
     /// Panics if there's more than one font
-    pub fn add_font_from_bytes(&mut self, bytes: &[u8]) -> u32 {
-        unimplemented!()
-    }
-
-    /// # Panics
-    ///
-    /// Panics if there's more than one font
-    pub fn add_font_from_path<P: AsRef<Path>>(&mut self, path: P) -> u32 {
-        unimplemented!()
+    pub fn add_font_from_bytes(&mut self, bytes: &'static [u8]) -> u32 {
+        let collection = FontCollection::from_bytes(bytes);
+        let font = collection.into_font().unwrap(); // only succeeds if collection consists of one font
+        let _v = self.fonts.insert(self.current_font_id, font);
+        debug_assert!(_v.is_none());
+        let font_id = self.current_font_id;
+        self.current_font_id += 1;
+        font_id
     }
 
     fn apply_projection(&mut self) {
@@ -329,9 +330,7 @@ impl Canvas {
         }
     }
 
-    fn draw_texture_from_id(&mut self, texture_id: u32, model: &Matrix4<f32>, render_options: &RenderOptions, scale: Option<f32>) {
-        let texture = &self.textures[&texture_id];
-        let texture_dims = texture.size();
+    fn draw_bound_texture(&mut self, texture_dims: (u32, u32), model: &Matrix4<f32>, render_options: &RenderOptions, scale: Option<f32>) {
         self.shader.set_matrix4(UniformName::Model, &model, false);
         if let Some((outline_thickn, color)) = render_options.outline {
             // relative to the texture in the OpenGL sense where 1.0 is max and 0.0 is min,
@@ -355,7 +354,6 @@ impl Canvas {
             gl::ActiveTexture(gl::TEXTURE0);
         }
 
-        texture.bind();
 
         unsafe {
             // TODO optimize and only make this call once across all draws?
@@ -376,22 +374,66 @@ impl Canvas {
         }
     }
 
-    fn draw_text(&mut self, font_id: u32, font_size: f32, text: &str, repr: &Graphic2DRepresentation<i32>, options: &RenderOptions) {
-        unimplemented!()
+    fn draw_text(&mut self, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, repr: &Graphic2DRepresentation<i32>, options: &RenderOptions) {
+        let (rgba8_image, width, height) = {
+            let font = &self.fonts[&font_id];
+            let pixel_height = font_size.ceil() as usize;
+            let scale = FontScale::uniform(font_size);
+
+            let font_color: Color<u8> = font_color.unwrap_or(Color::white());
+
+            let v_metrics = font.v_metrics(scale);
+
+            let offset = ::rusttype::point(0.0, v_metrics.ascent);
+            let glyphs: Vec<PositionedGlyph> = font.layout(text, scale, offset).collect();
+            let width = glyphs.iter().rev().map(|g| {
+                g.position().x as f32 + g.unpositioned().h_metrics().advance_width
+            }).next().unwrap_or(0.0).ceil();
+            let mut rgba8_image = RgbaImage::new(width as u32, pixel_height as u32);
+            for glyph in glyphs {
+                if let Some(bb) = glyph.pixel_bounding_box() {
+                    glyph.draw(|x, y, v| {
+                        let x = x as i32 + bb.min.x;
+                        let y = y as i32 + bb.min.y;
+
+                        // some fonts somehow have a value more than 1 sometimes...
+                        // so we have to ceil at 1.0
+                        let alpha = if v > 1.0 {
+                            255
+                        } else if v <= 0.0 {
+                            0
+                        } else {
+                            (v * 255.0).ceil() as u8
+                        };
+                        if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
+                            let x = x as u32;
+                            let y = y as u32;
+                            rgba8_image.put_pixel(x, y, Rgba::from_channels(font_color.r, font_color.g, font_color.b, alpha));
+                        }
+                    })
+                }
+            };
+            (rgba8_image, width, pixel_height)
+        };
+        let texture = Texture2D::from_bytes(&*rgba8_image, (width as u32, height as u32));
+        let model = self.compute_model_matrix_from_2d_repr(repr, (width as u32, height as u32), None);
+        texture.bind();
+        self.draw_bound_texture((width as u32, height as u32), &model, options, None);
     }
 
     fn draw_graphic_entity<'a>(&mut self, graphic_entity: &GraphicEntity<'a>) {
         match graphic_entity {
             &GraphicEntity::Texture {id, ref repr, ref render_options, scale} => {
-                let model = {
+                let (model, dims) = {
                     let texture = &self.textures[&id];
+                    texture.bind();
                     let texture_dims = texture.size();
-                    self.compute_model_matrix_from_2d_repr(repr, texture_dims, scale)
+                    (self.compute_model_matrix_from_2d_repr(repr, texture_dims, scale), texture_dims)
                 };
-                self.draw_texture_from_id(id, &model, render_options, scale);
+                self.draw_bound_texture(dims, &model, render_options, scale);
             },
-            &GraphicEntity::Text {font_id, font_size, text, ref repr, ref render_options} => {
-                self.draw_text(font_id, font_size, text, repr, render_options);
+            &GraphicEntity::Text {font_id, font_size, text, color, ref repr, ref render_options} => {
+                self.draw_text(font_id, font_size, text, color, repr, render_options);
             }
         }
     }
