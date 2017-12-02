@@ -69,6 +69,7 @@ impl ::std::fmt::Display for ShaderLoadError {
 enum ShaderBuildStep {
     CompileVertexShader,
     CompileFragmentShader,
+    // // Will come soon...
     // CompileGeometryShader,
     LinkProgram
 }
@@ -117,7 +118,7 @@ impl Shader {
 
     /// creates a Vanilla Shader
     pub fn vanilla() -> Result<Shader, ShaderLoadError> {
-        Shader::new(FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE, None)
+        Shader::new(FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE)
     }
 
     /// Check that the build step "step" has been completed successfully, otherwise return an
@@ -190,7 +191,7 @@ impl Shader {
         }
     } 
 
-    pub fn new(fragment_source: &str, vertex_source: &str, geometry_source: Option<&str>) -> Result<Shader, ShaderLoadError> {
+    pub fn new(fragment_source: &str, vertex_source: &str) -> Result<Shader, ShaderLoadError> {
         unsafe {
             let vertex_shader_id = gl::CreateShader(gl::VERTEX_SHADER);
             let fragment_shader_id = gl::CreateShader(gl::FRAGMENT_SHADER);

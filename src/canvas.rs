@@ -1,20 +1,17 @@
 use super::primitives::{Shader, UniformName};
 use super::texture::Texture2D;
-use cgmath::prelude::*;
-use cgmath::{Matrix4, Vector2, Vector3, Vector4, Ortho};
+use cgmath::{Matrix4, Vector3, Vector4, Ortho};
 
 use rusttype::{PositionedGlyph, FontCollection, Font, Scale as FontScale};
-use image::{self, GenericImage, ImageBuffer, RgbaImage, Rgba, Pixel};
+use image::{self, GenericImage, RgbaImage, Rgba, Pixel};
 
 use std::path::Path;
 use fnv::FnvHashMap as HashMap;
-use super::texture::*;
 use super::color::*;
 use gl;
 use gl::types::*;
 use std::os::raw::*;
 use std::mem::size_of;
-use std::cmp::{max, min};
 
 /// A Canvas doesn't do anything by itself, it MUST be linked to an OpenGL context
 pub struct Canvas {
@@ -330,7 +327,7 @@ impl Canvas {
         }
     }
 
-    fn draw_bound_texture(&mut self, texture_dims: (u32, u32), model: &Matrix4<f32>, render_options: &RenderOptions, scale: Option<f32>) {
+    fn draw_bound_texture(&mut self, texture_dims: (u32, u32), model: &Matrix4<f32>, render_options: &RenderOptions) {
         self.shader.set_matrix4(UniformName::Model, &model, false);
         if let Some((outline_thickn, color)) = render_options.outline {
             // relative to the texture in the OpenGL sense where 1.0 is max and 0.0 is min,
@@ -418,7 +415,7 @@ impl Canvas {
         let texture = Texture2D::from_bytes(&*rgba8_image, (width as u32, height as u32));
         let model = self.compute_model_matrix_from_2d_repr(repr, (width as u32, height as u32), None);
         texture.bind();
-        self.draw_bound_texture((width as u32, height as u32), &model, options, None);
+        self.draw_bound_texture((width as u32, height as u32), &model, options);
     }
 
     fn draw_graphic_entity<'a>(&mut self, graphic_entity: &GraphicEntity<'a>) {
@@ -430,7 +427,7 @@ impl Canvas {
                     let texture_dims = texture.size();
                     (self.compute_model_matrix_from_2d_repr(repr, texture_dims, scale), texture_dims)
                 };
-                self.draw_bound_texture(dims, &model, render_options, scale);
+                self.draw_bound_texture(dims, &model, render_options);
             },
             &GraphicEntity::Text {font_id, font_size, text, color, ref repr, ref render_options} => {
                 self.draw_text(font_id, font_size, text, color, repr, render_options);
