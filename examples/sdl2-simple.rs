@@ -61,6 +61,7 @@ fn main() {
                     filter_color: None,
                     blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
                     outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
+                    // outline: None
                 },
                 scale: Some(0.1)
             },
@@ -74,6 +75,7 @@ fn main() {
                     filter_color: None,
                     blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
                     outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
+                    // outline: None
                 },
                 scale: None,
             },
@@ -87,6 +89,7 @@ fn main() {
                     filter_color: None,
                     blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
                     outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
+                    // outline: None
                 },
                 scale: None,
             },
@@ -103,7 +106,10 @@ fn main() {
                 repr: Graphic2DRepresentation::CameraRelative {
                     position: CameraRelativePosition::FromTopRight(10, 10),
                 },
-                render_options: Default::default(),
+                render_options: RenderOptions {
+                    outline: Some((2.0, color::Color::from_rgb(0, 0, 255))),
+                    ..Default::default()
+                },
                 text: "Pote",
                 font_size: 30.0,
                 color: None,
@@ -155,7 +161,7 @@ fn main() {
         }
 
         let delta_t = ::std::time::Instant::now() - t0;
-        // println!("{}", delta_t.subsec_nanos() / 1_000);
+        println!("{}", 1_000_000_000 / delta_t.subsec_nanos());
         ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 30));
     }
 }
