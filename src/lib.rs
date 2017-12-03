@@ -19,11 +19,16 @@ extern crate image;
 extern crate cgmath;
 extern crate rusttype;
 extern crate fnv;
+#[macro_use]
+extern crate failure;
 
 mod primitives;
-pub mod color;
+mod color;
 mod texture;
 mod canvas;
+mod error;
 
 pub use self::texture::*;
+pub use self::color::*;
 pub use self::canvas::*;
+pub use self::error::{SprowlError as Error};

@@ -10,6 +10,7 @@ gl = "^0.6"
 cgmath = "^0.15"
 rusttype = "^0.2"
 fnv = "^1.0"
+failure = "^0.1"
 
 [dev-dependencies]
 sdl2 = "0.31"

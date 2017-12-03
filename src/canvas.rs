@@ -8,10 +8,16 @@ use image::{self, GenericImage, RgbaImage, Rgba, Pixel};
 use std::path::Path;
 use fnv::FnvHashMap as HashMap;
 use super::color::*;
+use super::error::{SprowlError};
 use gl;
 use gl::types::*;
 use std::os::raw::*;
 use std::mem::size_of;
+
+pub use primitives::ShaderLoadError;
+
+#[must_use]
+type SprowlErrors = Vec<SprowlError>;
 
 /// The representation of the world's camera and its associated assets.
 ///
@@ -136,7 +142,12 @@ impl Canvas {
     /// Creates a new Canvas with the given dimensions.
     ///
     /// The camera should have the format `(center_x, center_y, width, height)`
-    pub fn new(camera_bounds: (i32, i32, u32, u32)) -> Canvas {
+    ///
+    /// # Failures
+    ///
+    /// May return an error if the shader has not been compiled correctly. This may
+    /// happen when your version OpenGL is too old to support fragment and vertex shaders.
+    pub fn new(camera_bounds: (i32, i32, u32, u32)) -> Result<Canvas, ShaderLoadError> {
         type Vertices24 = [GLfloat; 24];
         unsafe {
 
@@ -162,7 +173,7 @@ impl Canvas {
             gl::BindVertexArray(0);
             
             let mut canvas = Canvas {
-                shader: Shader::vanilla().unwrap(),
+                shader: Shader::vanilla()?,
                 quad_vao: quad_vao,
                 current_texture_id: 0,
                 textures: Default::default(),
@@ -173,7 +184,7 @@ impl Canvas {
             };
             canvas.apply_projection();
             canvas.inner_init();
-            canvas
+            Ok(canvas)
         }
     }
 
@@ -181,7 +192,8 @@ impl Canvas {
     ///
     /// # Panics
     ///
-    /// (debug only) if the size is incorrect (higher than the slice's)
+    /// * (debug only) if the size is incorrect (higher than the slice's)
+    /// * (debug only) if the amount of textures  recorded is higher than u32::MAX_VALUE
     pub fn add_texture_from_raw_bytes(&mut self, bytes: &[u8], size: (u32, u32)) -> u32 {
         let texture = Texture2D::from_bytes(bytes, size);
         let _v = self.textures.insert(self.current_texture_id, texture);
@@ -328,11 +340,15 @@ impl Canvas {
     /// let entities: Vec<GraphicEntity> = vec!();
     /// canvas.draw(&entities);
     /// ```
-    pub fn draw<'a, 'b: 'a, I: IntoIterator<Item=&'a GraphicEntity<'b>>>(&mut self, graphic_entities: I) {
+    pub fn draw<'a, 'b: 'a, I: IntoIterator<Item=&'a GraphicEntity<'b>>>(&mut self, graphic_entities: I) -> SprowlErrors {
+        let mut errors = vec!();
         self.shader.use_program();
         for graphic_entity in graphic_entities {
-            self.draw_graphic_entity(graphic_entity);
+            if let Err(error) = self.draw_graphic_entity(graphic_entity) {
+                errors.push(error);
+            };
         }
+        errors
     }
 
     fn compute_model_matrix(origin_x: f32, origin_y: f32, width: f32, height: f32) -> Matrix4<f32> {
@@ -430,9 +446,12 @@ impl Canvas {
         }
     }
 
-    fn draw_text(&mut self, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, repr: &Graphic2DRepresentation<i32>, options: &RenderOptions) {
+    fn draw_text(&mut self, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, repr: &Graphic2DRepresentation<i32>, options: &RenderOptions) -> Result<(), SprowlError> {
         let (rgba8_image, width, height) = {
-            let font = &self.fonts[&font_id];
+            let font = match self.fonts.get(&font_id) {
+                None => return Err(SprowlError::MissingTextureID(font_id)),
+                Some(font) => font
+            };
             let pixel_height = font_size.ceil() as usize;
             let scale = FontScale::uniform(font_size);
 
@@ -475,13 +494,17 @@ impl Canvas {
         let model = self.compute_model_matrix_from_2d_repr(repr, (width as u32, height as u32), None);
         texture.bind();
         self.draw_bound_texture((width as u32, height as u32), &model, options);
+        Ok(())
     }
 
-    fn draw_graphic_entity<'a>(&mut self, graphic_entity: &GraphicEntity<'a>) {
+    fn draw_graphic_entity<'a>(&mut self, graphic_entity: &GraphicEntity<'a>) -> Result<(), SprowlError> {
         match graphic_entity {
             &GraphicEntity::Texture {id, ref repr, ref render_options, scale} => {
                 let (model, dims) = {
-                    let texture = &self.textures[&id];
+                    let texture = match self.textures.get(&id) {
+                        None => return Err(SprowlError::MissingTextureID(id)),
+                        Some(texture) => texture,
+                    };
                     texture.bind();
                     let texture_dims = texture.size();
                     (self.compute_model_matrix_from_2d_repr(repr, texture_dims, scale), texture_dims)
@@ -489,9 +512,10 @@ impl Canvas {
                 self.draw_bound_texture(dims, &model, render_options);
             },
             &GraphicEntity::Text {font_id, font_size, text, color, ref repr, ref render_options} => {
-                self.draw_text(font_id, font_size, text, color, repr, render_options);
+                self.draw_text(font_id, font_size, text, color, repr, render_options)?;
             }
-        }
+        };
+        Ok(())
     }
 }
 

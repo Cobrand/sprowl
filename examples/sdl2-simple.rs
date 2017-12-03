@@ -34,7 +34,7 @@ fn main() {
 
     let mut canvas = {
         let (w, h) = window.size();
-        Canvas::new((0, 0, w, h))
+        Canvas::new((0, 0, w, h)).unwrap()
     };
 
     let stick_id = canvas.add_texture_from_image_path("res/stick.png").unwrap();
@@ -49,7 +49,7 @@ fn main() {
         unsafe {
             gl::Viewport(0, 0, window_size.0 as i32, window_size.1 as i32);
         }
-        canvas.clear(Some(color::Color::from_rgb(128u8, 128, 128)));
+        canvas.clear(Some(Color::from_rgb(128u8, 128, 128)));
         let graphic_entities: Vec<sprowl::GraphicEntity> = vec!(
             GraphicEntity::Texture {
                 id: stick_id,
@@ -59,8 +59,8 @@ fn main() {
                 },
                 render_options: RenderOptions {
                     filter_color: None,
-                    blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
-                    outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
+                    blend_color: Some(Color::from_rgba(255, 255, 255, 192)),
+                    outline: Some((5.0, Color::from_rgb(0, 0, 255)))
                     // outline: None
                 },
                 scale: Some(0.1)
@@ -73,8 +73,8 @@ fn main() {
                 },
                 render_options: RenderOptions {
                     filter_color: None,
-                    blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
-                    outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
+                    blend_color: Some(Color::from_rgba(255, 255, 255, 192)),
+                    outline: Some((5.0, Color::from_rgb(0, 0, 255)))
                     // outline: None
                 },
                 scale: None,
@@ -87,8 +87,8 @@ fn main() {
                 },
                 render_options: RenderOptions {
                     filter_color: None,
-                    blend_color: Some(color::Color::from_rgba(255, 255, 255, 192)),
-                    outline: Some((5.0, color::Color::from_rgb(0, 0, 255)))
+                    blend_color: Some(Color::from_rgba(255, 255, 255, 192)),
+                    outline: Some((5.0, Color::from_rgb(0, 0, 255)))
                     // outline: None
                 },
                 scale: None,
@@ -107,7 +107,7 @@ fn main() {
                     position: CameraRelativePosition::FromTopRight(10, 10),
                 },
                 render_options: RenderOptions {
-                    outline: Some((2.0, color::Color::from_rgb(0, 0, 255))),
+                    outline: Some((2.0, Color::from_rgb(0, 0, 255))),
                     ..Default::default()
                 },
                 text: "Pote",
@@ -117,7 +117,7 @@ fn main() {
         );
         canvas.draw(&graphic_entities);
         window.gl_swap_window();
-        let (cam_x, cam_y, cam_w, cam_h) = canvas.camera_bounds();
+        let (cam_x, cam_y, _, _) = canvas.camera_bounds();
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
