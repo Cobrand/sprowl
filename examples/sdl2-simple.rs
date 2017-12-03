@@ -60,8 +60,9 @@ fn main() {
                 render_options: RenderOptions {
                     filter_color: None,
                     blend_color: Some(Color::from_rgba(255, 255, 255, 192)),
-                    outline: Some((5.0, Color::from_rgb(0, 0, 255)))
-                    // outline: None
+                    outline: Some((5.0, Color::from_rgb(0, 0, 255))),
+                    // outline: None,
+                    flip: Flip::None
                 },
                 scale: Some(0.1)
             },
@@ -74,8 +75,9 @@ fn main() {
                 render_options: RenderOptions {
                     filter_color: None,
                     blend_color: Some(Color::from_rgba(255, 255, 255, 192)),
-                    outline: Some((5.0, Color::from_rgb(0, 0, 255)))
+                    outline: Some((5.0, Color::from_rgb(0, 0, 255))),
                     // outline: None
+                    flip: Flip::Both
                 },
                 scale: None,
             },
@@ -88,8 +90,9 @@ fn main() {
                 render_options: RenderOptions {
                     filter_color: None,
                     blend_color: Some(Color::from_rgba(255, 255, 255, 192)),
-                    outline: Some((5.0, Color::from_rgb(0, 0, 255)))
+                    outline: Some((5.0, Color::from_rgb(0, 0, 255))),
                     // outline: None
+                    flip: Flip::Vertical
                 },
                 scale: None,
             },

@@ -1,6 +1,6 @@
 use super::primitives::{Shader, UniformName};
 use super::texture::Texture2D;
-use cgmath::{Matrix4, Vector3, Vector4, Ortho};
+use cgmath::{Matrix4, Vector3, Vector4, Ortho, Deg};
 
 use rusttype::{PositionedGlyph, FontCollection, Font, Scale as FontScale};
 use image::{self, GenericImage, RgbaImage, Rgba, Pixel};
@@ -18,6 +18,21 @@ pub use primitives::ShaderLoadError;
 
 #[must_use]
 type SprowlErrors = Vec<SprowlError>;
+
+/// Flip "around" the `flip` axis.
+#[derive(Debug, Clone, Copy)]
+pub enum Flip {
+    None,
+    Vertical,
+    Horizontal,
+    Both
+}
+
+impl Default for Flip {
+    fn default() -> Flip {
+        Flip::None
+    }
+}
 
 /// The representation of the world's camera and its associated assets.
 ///
@@ -128,7 +143,8 @@ pub struct RenderOptions {
     /// absolute: if the zoom level is lower, the outline will be less pronounced,
     /// while if the zoom level is higher than 1, the outline may look more "solid"
     /// and not antiliased.
-    pub outline: Option<(f32, Color<u8>)>
+    pub outline: Option<(f32, Color<u8>)>,
+    pub flip: Flip,
 }
 
 impl Canvas {
@@ -351,12 +367,23 @@ impl Canvas {
         errors
     }
 
-    fn compute_model_matrix(origin_x: f32, origin_y: f32, width: f32, height: f32) -> Matrix4<f32> {
-        Matrix4::from_translation(Vector3::<f32>::new(origin_x, origin_y, 0.0)) *
-        Matrix4::from_nonuniform_scale(width, height, 1.0)
+    fn compute_model_matrix(origin_x: f32, origin_y: f32, width: f32, height: f32, flip: Flip) -> Matrix4<f32> {
+        let m = match flip {
+            Flip::None => Matrix4::from_translation(Vector3::<f32>::new(origin_x, origin_y, 0.0)),
+            Flip::Vertical =>
+                Matrix4::from_translation(Vector3::<f32>::new(origin_x + width, origin_y, 0.0)) *
+                Matrix4::from_angle_y(Deg(180.0)),
+            Flip::Horizontal =>
+                Matrix4::from_translation(Vector3::<f32>::new(origin_x, origin_y + height, 0.0)) *
+                Matrix4::from_angle_x(Deg(180.0)),
+            Flip::Both =>
+                Matrix4::from_translation(Vector3::<f32>::new(origin_x + width, origin_y + height, 0.0)) *
+                Matrix4::from_angle_x(Deg(180.0)) * Matrix4::from_angle_y(Deg(180.0)),
+        };
+        m * Matrix4::from_nonuniform_scale(width, height, 1.0)
     }
 
-    fn compute_model_matrix_from_2d_repr(&self, pos: &Graphic2DRepresentation<i32>, element_dims: (u32, u32), scale: Option<f32>) -> Matrix4<f32> {
+    fn compute_model_matrix_from_2d_repr(&self, pos: &Graphic2DRepresentation<i32>, element_dims: (u32, u32), scale: Option<f32>, flip: Flip) -> Matrix4<f32> {
         use CameraRelativePosition::*;
         use Graphic2DRepresentation::*;
         let elt_w = element_dims.0 as f32 * scale.unwrap_or(1.0);
@@ -367,38 +394,23 @@ impl Canvas {
         let cam_h = self.camera_bounds.3 as f32 / self.zoom_level;
         match pos {
             &WorldAbsolute {x, y} =>
-                Self::compute_model_matrix(x as f32, y as f32, elt_w, elt_h),
+                Self::compute_model_matrix(x as f32, y as f32, elt_w, elt_h, flip),
             &CameraRelative {ref position} => {
-                match position {
+                let (x, y) = match position {
                     &FromTopLeft(x, y) =>
-                        Self::compute_model_matrix(
-                            ((cam_center_x - cam_w / 2.0) + (x as f32) / self.zoom_level),
-                            ((cam_center_y - cam_h / 2.0) + (y as f32) / self.zoom_level),
-                            elt_w / self.zoom_level,
-                            elt_h / self.zoom_level,
-                        ),
+                        ((cam_center_x - cam_w / 2.0) + (x as f32) / self.zoom_level,
+                        (cam_center_y - cam_h / 2.0) + (y as f32) / self.zoom_level),
                     &FromBottomLeft(x, y) =>
-                        Self::compute_model_matrix(
-                            ((cam_center_x - cam_w / 2.0) + x as f32 / self.zoom_level),
-                            ((cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
-                            elt_w / self.zoom_level,
-                            elt_h / self.zoom_level,
-                        ),
+                        ((cam_center_x - cam_w / 2.0) + x as f32 / self.zoom_level,
+                        (cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
                     &FromBottomRight(x, y) =>
-                        Self::compute_model_matrix(
-                            ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level),
-                            ((cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
-                            elt_w / self.zoom_level,
-                            elt_h / self.zoom_level,
-                        ),
+                        ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level,
+                        (cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
                     &FromTopRight(x, y) =>
-                        Self::compute_model_matrix(
-                            ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level),
-                            ((cam_center_y - cam_h / 2.0) + y as f32 / self.zoom_level),
-                            elt_w / self.zoom_level,
-                            elt_h / self.zoom_level,
-                        ),
-                }
+                        ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level,
+                        (cam_center_y - cam_h / 2.0) + y as f32 / self.zoom_level),
+                };
+                Self::compute_model_matrix(x, y, elt_w / self.zoom_level, elt_h / self.zoom_level, flip)
             }
         }
     }
@@ -491,7 +503,7 @@ impl Canvas {
             (rgba8_image, width, pixel_height)
         };
         let texture = Texture2D::from_bytes(&*rgba8_image, (width as u32, height as u32));
-        let model = self.compute_model_matrix_from_2d_repr(repr, (width as u32, height as u32), None);
+        let model = self.compute_model_matrix_from_2d_repr(repr, (width as u32, height as u32), None, options.flip);
         texture.bind();
         self.draw_bound_texture((width as u32, height as u32), &model, options);
         Ok(())
@@ -507,7 +519,7 @@ impl Canvas {
                     };
                     texture.bind();
                     let texture_dims = texture.size();
-                    (self.compute_model_matrix_from_2d_repr(repr, texture_dims, scale), texture_dims)
+                    (self.compute_model_matrix_from_2d_repr(repr, texture_dims, scale, render_options.flip), texture_dims)
                 };
                 self.draw_bound_texture(dims, &model, render_options);
             },
