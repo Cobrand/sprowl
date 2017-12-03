@@ -144,6 +144,10 @@ pub struct RenderOptions {
     /// while if the zoom level is higher than 1, the outline may look more "solid"
     /// and not antiliased.
     pub outline: Option<(f32, Color<u8>)>,
+    /// Flip the texture around an axis
+    ///
+    /// There is no correction to do, the texture will keep its origin and its size,
+    /// but the output texture will be flipped in whatever way you want.
     pub flip: Flip,
 }
 
