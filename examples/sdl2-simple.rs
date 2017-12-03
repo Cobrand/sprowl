@@ -41,8 +41,8 @@ fn main() {
     let font_id = canvas.add_font_from_bytes(include_bytes!("/usr/share/fonts/TTF/DejaVuSansMono.ttf"));
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let mut entity_x: i32 = 500;
-    let mut entity_y: i32 = 500;
+    let mut entity_x: i32 = 250;
+    let mut entity_y: i32 = 250;
     'running: loop {
         let t0 = ::std::time::Instant::now();
         let window_size = window.size();
@@ -164,7 +164,7 @@ fn main() {
         }
 
         let delta_t = ::std::time::Instant::now() - t0;
-        println!("{}", 1_000_000_000 / delta_t.subsec_nanos());
+        // println!("{} fps (theory)", 1_000_000_000 / delta_t.subsec_nanos());
         ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 30));
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "sprowl"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Cobrand <cobrandw@gmail.com>"]
 license = "MIT/Apache-2.0"
 
