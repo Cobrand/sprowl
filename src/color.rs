@@ -3,11 +3,17 @@ pub trait ColorType: ::std::fmt::Debug + Clone + Copy {
     const COLOR_MIN_VALUE: Self;
 }
 
+/// Color where the minimum is 0 and maximum is 255.
+///
+/// The industry standard
 impl ColorType for u8 {
     const COLOR_MAX_VALUE: u8 = 255;
     const COLOR_MIN_VALUE: u8 = 0;
 }
 
+/// Color where the minimum is 0.0 and the maximum is 1.0
+///
+/// Mainly used for OpenGL
 impl ColorType for f32 {
     const COLOR_MAX_VALUE: f32 = 1.0f32;
     const COLOR_MIN_VALUE: f32 = 0.0f32;

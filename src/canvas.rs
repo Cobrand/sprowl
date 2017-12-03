@@ -13,7 +13,13 @@ use gl::types::*;
 use std::os::raw::*;
 use std::mem::size_of;
 
-/// A Canvas doesn't do anything by itself, it MUST be linked to an OpenGL context
+/// The representation of the world's camera and its associated assets.
+///
+/// Currently, a Canvas can hold textures and fonts, and print them dynamically.
+///
+/// You first have to register textures via the `add_*` methods here,
+/// A Canvas doesn't do anything by itself, it MUST be linked to an OpenGL context;
+/// see the sdl2-simple example.
 pub struct Canvas {
     shader: Shader,
     quad_vao: GLuint,
@@ -43,7 +49,7 @@ fn compute_projection_matrix(x: i32, y: i32, w: u32, h: u32, zoom_level: f32) ->
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum CameraRelativePosition<T: ::std::fmt::Debug + Clone + Copy> {
     FromTopLeft(T, T),
     FromTopRight(T, T),
@@ -51,7 +57,15 @@ pub enum CameraRelativePosition<T: ::std::fmt::Debug + Clone + Copy> {
     FromBottomRight(T, T),
 }
 
-#[derive(Debug)]
+/// Represents how should an element be displayed in our world:
+///
+/// `CameraRelative` will keep the same aspect and position ratio no matter
+/// what the zoom level and the camera position is; while `WorldAbsolute`
+/// positions will only be displayed if they are within the camera's FoV.
+///
+/// Simply put, `CameraRelative` should be used for UIs, while WorldAbsolute
+/// should be used for "In Game" stuff.
+#[derive(Debug, Clone, Copy)]
 pub enum Graphic2DRepresentation<T: ::std::fmt::Debug + Clone + Copy> {
     CameraRelative {
         position: CameraRelativePosition<T>,
@@ -71,9 +85,13 @@ pub enum GraphicEntity<'a> {
         scale: Option<f32>
     },
     Text {
+        /// The ID that was returned by add_font_*
         font_id: u32,
+        // The font size, in pixels
         font_size: f32,
+        // The text that should be printed
         text: &'a str,
+        // The color that should be used for this text. Default is white.
         color: Option<Color<u8>>,
         repr: Graphic2DRepresentation<i32>,
         render_options: RenderOptions
@@ -94,9 +112,16 @@ pub struct RenderOptions {
     /// 
     /// For textures, alpha values between 0.1 and 0.6 are recommended.
     ///
-    /// Can be used to simulate poison on a caracter (green-ish tint),
-    /// or a "enemy has been hit by your attack" kind of effect with white stuff.
+    /// This can be used to simulate poison on a caracter (green-ish tint),
+    /// or a "enemy has been hit by your attack" kind of effect with red stuff.
     pub blend_color: Option<Color<u8>>,
+    /// Draws an outline of `0` pixels with the color `1`. The outline may
+    /// have an alpha value.
+    /// 
+    /// Please note that the outline is applied *after* any scaling, but this is not
+    /// absolute: if the zoom level is lower, the outline will be less pronounced,
+    /// while if the zoom level is higher than 1, the outline may look more "solid"
+    /// and not antiliased.
     pub outline: Option<(f32, Color<u8>)>
 }
 
@@ -108,11 +133,9 @@ impl Canvas {
         }
     }
 
-    // pub(crate) fn restore_context(&mut self) {
-    //     // TODO
-    // }
-
-
+    /// Creates a new Canvas with the given dimensions.
+    ///
+    /// The camera should have the format `(center_x, center_y, width, height)`
     pub fn new(camera_bounds: (i32, i32, u32, u32)) -> Canvas {
         type Vertices24 = [GLfloat; 24];
         unsafe {
@@ -154,6 +177,8 @@ impl Canvas {
         }
     }
 
+    /// Load a texture from bytes: you must specify the correct width and height of the texture.
+    ///
     /// # Panics
     ///
     /// (debug only) if the size is incorrect (higher than the slice's)
@@ -166,6 +191,12 @@ impl Canvas {
         texture_id
     }
 
+    /// Load a texture from some bytes. Preferably, the image should be PNG with an alpha layer.
+    /// Returns a number representing the ID of the texture, which you can use later on in `draw_entities(..)`
+    ///
+    /// # Panics
+    /// 
+    /// Panics if the image is not RGBA (the texture has no alpha layer)
     pub fn add_texture_from_image_bytes(&mut self, bytes: &[u8], image_format: Option<image::ImageFormat>) -> image::ImageResult<u32> {
         let opened_image = match image_format {
             Some(image_format) => image::load_from_memory_with_format(bytes, image_format),
@@ -180,7 +211,13 @@ impl Canvas {
         };
         Ok(self.add_texture_from_raw_bytes(color_data.as_slice(), (img_w, img_h)))
     }
-    
+
+    /// Load a texture from a file given a path.
+    /// Returns a number representing the ID of the texture, which you can use later on in `draw_entities(..)`
+    ///
+    /// # Panics
+    /// 
+    /// Panics if the image is not RGBA (the texture has no alpha layer)
     pub fn add_texture_from_image_path<P: AsRef<Path>>(&mut self, path: P) -> image::ImageResult<u32> {
         let img = image::open(&path)?;
         let (img_w, img_h) = img.dimensions();
@@ -193,6 +230,10 @@ impl Canvas {
         Ok(self.add_texture_from_raw_bytes(color_data.as_slice(), (img_w, img_h)))
     }
 
+    /// Load a font from *static* bytes. There is currently no way to dynamically load a font, for convenience only.
+    ///
+    /// Returns a number representing the ID of the font, which you can use later on in `draw_entities(..)`
+    ///
     /// # Panics
     ///
     /// Panics if there's more than one font
@@ -218,18 +259,20 @@ impl Canvas {
         self.shader.set_matrix4(UniformName::Projection, &projection_matrix, true);
     }
 
-    /// this SHOULD be called when the screen resizes, but NOT when zooming/de-zoming;
+    /// This SHOULD be called when the screen resizes, but NOT when zooming/de-zoming;
     /// use set_zoom_level for that.
     pub fn set_camera_size(&mut self, new_size: (u32, u32)) {
         let (x, y, _, _) = self.camera_bounds.clone();
         self.set_camera((x, y, new_size.0, new_size.1));
     }
 
+    /// Sets the camera's center position.
     pub fn set_camera_position(&mut self, new_position: (i32, i32)) {
         let (_, _, w, h) = self.camera_bounds.clone();
         self.set_camera((new_position.0, new_position.1, w, h));
     }
 
+    /// Sets the camera bounds as the format (center_x, center_y, width, height)
     pub fn set_camera(&mut self, new_bounds: (i32, i32, u32, u32)) {
         self.camera_bounds = new_bounds;
         self.apply_projection();
@@ -241,20 +284,26 @@ impl Canvas {
     ///
     /// Panics if zoom_level is equal or less than 0
     pub fn set_zoom_level(&mut self, zoom_level: f32) {
+        if self.zoom_level <= 0.0 {
+            panic!("zoom_level cannot be less than 0, received {}", self.zoom_level);
+        }
         self.zoom_level = zoom_level;
         self.apply_projection();
     }
 
+    /// Returns the current zoom level. Note that a zoom level of 2
+    /// will zoom on the center of the camera, and make the textures
+    /// and elements of the world appear larger. A level below 1
     pub fn zoom_level(&mut self) -> f32 {
         self.zoom_level
     }
 
-    /// CENTER x, CENTER y, width, height
+    /// Returns the bounds of the camera as (center_x, center_y, width, height)
     pub fn camera_bounds(&self) -> (i32, i32, u32, u32) {
         self.camera_bounds
     }
 
-    /// Default is black, like your soul.
+    /// Default clear color is black, just like your soul.
     pub fn clear(&mut self, clear_color: Option<Color<u8>>) {
         let clear_color: Color<f32> = clear_color.unwrap_or(Color::<u8>::from_rgb(0, 0, 0)).to_color_f32();
         unsafe {
@@ -263,17 +312,28 @@ impl Canvas {
         }
     }
 
-    // Entities will be drawn from first to last; if you want ORDERED
-    // drawing you must use the `ordered_draw` method 
+    /// Draw entities in the given order.
+    ///
+    /// The first entities of this iterator will be on the "bottom" of the layer while others will be on
+    /// "top" of the layer.
+    ///
+    /// Note that while you can pass a slice to this method, it can also accept iterators. This may allow
+    /// you to actually print all of your world without making extra allocations.
+    ///
+    /// # Notes
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let entities: Vec<GraphicEntity> = vec!();
+    /// canvas.draw(&entities);
+    /// ```
     pub fn draw<'a, 'b: 'a, I: IntoIterator<Item=&'a GraphicEntity<'b>>>(&mut self, graphic_entities: I) {
         self.shader.use_program();
         for graphic_entity in graphic_entities {
             self.draw_graphic_entity(graphic_entity);
         }
     }
-
-    // pub fn ordered_draw<'a, I: IntoIterator<Item=&'a (GraphicEntity, i32)>>(&mut self, graphic_entities_with_z: I) {
-    // }
 
     fn compute_model_matrix(origin_x: f32, origin_y: f32, width: f32, height: f32) -> Matrix4<f32> {
         Matrix4::from_translation(Vector3::<f32>::new(origin_x, origin_y, 0.0)) *
@@ -350,7 +410,6 @@ impl Canvas {
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0);
         }
-
 
         unsafe {
             // TODO optimize and only make this call once across all draws?
