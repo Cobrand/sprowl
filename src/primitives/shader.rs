@@ -130,7 +130,7 @@ impl Shader {
             match step {
                 ShaderBuildStep::LinkProgram => {
                     gl::GetProgramiv(object, gl::LINK_STATUS, &mut compile_result);
-                    if compile_result != gl::TRUE as i32 {
+                    if compile_result != i32::from(gl::TRUE) {
                         // retrieve the error
                         gl::GetProgramiv(object, gl::INFO_LOG_LENGTH, &mut info_log_length);
                         let mut error_message: Vec<c_char> = Vec::with_capacity(info_log_length as usize + 1);
@@ -141,7 +141,7 @@ impl Shader {
                 },
                 _ => {
                     gl::GetShaderiv(object, gl::COMPILE_STATUS, &mut compile_result);
-                    if compile_result != gl::TRUE as i32 {
+                    if compile_result != i32::from(gl::TRUE) {
                         // retrieve the error
                         gl::GetShaderiv(object, gl::INFO_LOG_LENGTH, &mut info_log_length);
                         let mut error_message: Vec<c_char> = Vec::with_capacity(info_log_length as usize + 1);

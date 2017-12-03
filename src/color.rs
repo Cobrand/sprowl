@@ -56,10 +56,10 @@ impl<T: ColorType> Color<T> {
 impl Color<u8> {
     pub fn to_color_f32(self) -> Color<f32> {
         Color {
-            r: (self.r as f32) / 255.0,
-            g: (self.g as f32) / 255.0,
-            b: (self.b as f32) / 255.0,
-            a: (self.a as f32) / 255.0,
+            r: f32::from(self.r) / 255.0,
+            g: f32::from(self.g) / 255.0,
+            b: f32::from(self.b) / 255.0,
+            a: f32::from(self.a) / 255.0,
         }
     }
 }

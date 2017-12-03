@@ -53,13 +53,14 @@ pub struct Canvas {
     zoom_level: f32,
 }
 
-/// x center, y center, zoom_level higher than 0 plz
+/// format: (x center, y center, width, height)
+// `zoom_level` should be higher than 0
 fn compute_projection_matrix(x: i32, y: i32, w: u32, h: u32, zoom_level: f32) -> Matrix4<f32> {
     debug_assert!(zoom_level > 0.0);
     let x = x as f32;
     let y = y as f32;
-    let camera_half_w = (w as f32) / 2.0;
-    let camera_half_h = (h as f32) / 2.0;
+    let camera_half_w = w as f32 / 2.0;
+    let camera_half_h = h as f32 / 2.0;
     Matrix4::<f32>::from(Ortho {
         left: (x - camera_half_w / zoom_level),
         right: (x + camera_half_w / zoom_level),
@@ -82,9 +83,9 @@ pub enum CameraRelativePosition<T: ::std::fmt::Debug + Clone + Copy> {
 ///
 /// `CameraRelative` will keep the same aspect and position ratio no matter
 /// what the zoom level and the camera position is; while `WorldAbsolute`
-/// positions will only be displayed if they are within the camera's FoV.
+/// positions will only be displayed if they are within the camera's field of view.
 ///
-/// Simply put, `CameraRelative` should be used for UIs, while WorldAbsolute
+/// Simply put, `CameraRelative` should be used for UIs, while `WorldAbsolute`
 /// should be used for "In Game" stuff.
 #[derive(Debug, Clone, Copy)]
 pub enum Graphic2DRepresentation<T: ::std::fmt::Debug + Clone + Copy> {
@@ -294,13 +295,13 @@ impl Canvas {
     /// This SHOULD be called when the screen resizes, but NOT when zooming/de-zoming;
     /// use set_zoom_level for that.
     pub fn set_camera_size(&mut self, new_size: (u32, u32)) {
-        let (x, y, _, _) = self.camera_bounds.clone();
+        let (x, y, _, _) = self.camera_bounds;
         self.set_camera((x, y, new_size.0, new_size.1));
     }
 
     /// Sets the camera's center position.
     pub fn set_camera_position(&mut self, new_position: (i32, i32)) {
-        let (_, _, w, h) = self.camera_bounds.clone();
+        let (_, _, w, h) = self.camera_bounds;
         self.set_camera((new_position.0, new_position.1, w, h));
     }
 
@@ -396,21 +397,21 @@ impl Canvas {
         let cam_center_y = self.camera_bounds.1 as f32;
         let cam_w = self.camera_bounds.2 as f32 / self.zoom_level;
         let cam_h = self.camera_bounds.3 as f32 / self.zoom_level;
-        match pos {
-            &WorldAbsolute {x, y} =>
+        match *pos {
+            WorldAbsolute {x, y} =>
                 Self::compute_model_matrix(x as f32, y as f32, elt_w, elt_h, flip),
-            &CameraRelative {ref position} => {
-                let (x, y) = match position {
-                    &FromTopLeft(x, y) =>
+            CameraRelative {ref position} => {
+                let (x, y) = match *position {
+                    FromTopLeft(x, y) =>
                         ((cam_center_x - cam_w / 2.0) + (x as f32) / self.zoom_level,
                         (cam_center_y - cam_h / 2.0) + (y as f32) / self.zoom_level),
-                    &FromBottomLeft(x, y) =>
+                    FromBottomLeft(x, y) =>
                         ((cam_center_x - cam_w / 2.0) + x as f32 / self.zoom_level,
                         (cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
-                    &FromBottomRight(x, y) =>
+                    FromBottomRight(x, y) =>
                         ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level,
                         (cam_center_y + cam_h / 2.0) - (y as f32 + elt_h) / self.zoom_level),
-                    &FromTopRight(x, y) =>
+                    FromTopRight(x, y) =>
                         ((cam_center_x + cam_w / 2.0) - (x as f32 + elt_w) / self.zoom_level,
                         (cam_center_y - cam_h / 2.0) + y as f32 / self.zoom_level),
                 };
@@ -420,7 +421,7 @@ impl Canvas {
     }
 
     fn draw_bound_texture(&mut self, texture_dims: (u32, u32), model: &Matrix4<f32>, render_options: &RenderOptions) {
-        self.shader.set_matrix4(UniformName::Model, &model, false);
+        self.shader.set_matrix4(UniformName::Model, model, false);
         if let Some((outline_thickn, color)) = render_options.outline {
             // relative to the texture in the OpenGL sense where 1.0 is max and 0.0 is min,
             // how big is the outline in those coordinates?
@@ -429,7 +430,7 @@ impl Canvas {
             self.shader.set_float(UniformName::OutlineWidthX, outline_x, false);
             self.shader.set_float(UniformName::OutlineWidthY, outline_y, false);
             let (r, g, b) = color.rgb();
-            self.shader.set_vector3(UniformName::OutlineColor, Vector3::new((r as f32) / 255.0, (g as f32) / 255.0, (b as f32) / 255.0), false);
+            self.shader.set_vector3(UniformName::OutlineColor, Vector3::new(f32::from(r) / 255.0, f32::from(g) / 255.0, f32::from(b) / 255.0), false);
         }
         if let Some(color_u8) = render_options.filter_color {
             let (r, g, b, a) = color_u8.to_color_f32().rgba();
@@ -471,7 +472,7 @@ impl Canvas {
             let pixel_height = font_size.ceil() as usize;
             let scale = FontScale::uniform(font_size);
 
-            let font_color: Color<u8> = font_color.unwrap_or(Color::white());
+            let font_color: Color<u8> = font_color.unwrap_or_else(Color::white);
 
             let v_metrics = font.v_metrics(scale);
 
@@ -514,8 +515,8 @@ impl Canvas {
     }
 
     fn draw_graphic_entity<'a>(&mut self, graphic_entity: &GraphicEntity<'a>) -> Result<(), SprowlError> {
-        match graphic_entity {
-            &GraphicEntity::Texture {id, ref repr, ref render_options, scale} => {
+        match *graphic_entity {
+            GraphicEntity::Texture {id, ref repr, ref render_options, scale} => {
                 let (model, dims) = {
                     let texture = match self.textures.get(&id) {
                         None => return Err(SprowlError::MissingTextureID(id)),
@@ -527,7 +528,7 @@ impl Canvas {
                 };
                 self.draw_bound_texture(dims, &model, render_options);
             },
-            &GraphicEntity::Text {font_id, font_size, text, color, ref repr, ref render_options} => {
+            GraphicEntity::Text {font_id, font_size, text, color, ref repr, ref render_options} => {
                 self.draw_text(font_id, font_size, text, color, repr, render_options)?;
             }
         };
