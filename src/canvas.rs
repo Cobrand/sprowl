@@ -336,6 +336,14 @@ impl Canvas {
         self.camera_bounds
     }
 
+    /// Returns the bounds of the camera, taking into the zoom level
+    pub fn camera_bounds_with_zoom(&self) -> (f32, f32, f32, f32) {
+        (self.camera_bounds.0 as f32,
+        self.camera_bounds.1 as f32,
+        self.camera_bounds.2 as f32 / self.zoom_level,
+        self.camera_bounds.3 as f32 / self.zoom_level)
+    }
+
     /// Default clear color is black, just like your soul.
     pub fn clear(&mut self, clear_color: Option<Color<u8>>) {
         let clear_color: Color<f32> = clear_color.unwrap_or(Color::<u8>::from_rgb(0, 0, 0)).to_color_f32();
@@ -418,6 +426,16 @@ impl Canvas {
                 Self::compute_model_matrix(x, y, elt_w / self.zoom_level, elt_h / self.zoom_level, flip)
             }
         }
+    }
+
+    #[allow(dead_code)]
+    // TODO refactor this and do NOT print stuff that is not within the camera
+    fn is_within_bounds(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
+        let (cam_x, cam_y, cam_w, cam_h) = self.camera_bounds_with_zoom();
+        cam_x - cam_w / 2.0 <= x + w &&
+        cam_x + cam_w / 2.0 >= x &&
+        cam_y - cam_h / 2.0 <= y + h &&
+        cam_y + cam_h / 2.0 >= y
     }
 
     fn draw_bound_texture(&mut self, texture_dims: (u32, u32), model: &Matrix4<f32>, render_options: &RenderOptions) {
