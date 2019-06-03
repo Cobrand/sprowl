@@ -3,38 +3,16 @@ use gl::types::*;
 use std::os::raw::*;
 use fnv::FnvHashMap as HashMap;
 
-use cgmath::{Matrix4, Vector3, Vector4};
+pub use crate::texture::Texture2D;
+pub use crate::Shape;
+
+use cgmath::{Matrix4, Vector2, Vector3, Vector4};
 
 use std::ffi::{CStr, CString};
 use std::ptr;
 
-static FRAGMENT_SHADER_SOURCE: &'static str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/vanilla_fs.glsl"));
-static VERTEX_SHADER_SOURCE: &'static str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/vanilla_vs.glsl"));
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum UniformName {
-    Projection,
-    Model,
-    OutlineWidthX,
-    OutlineWidthY,
-    OutlineColor,
-    ModelColorFilter,
-    ModelColorBlend,
-}
-
-impl UniformName {
-    fn as_str(&self) -> &'static str {
-        use self::UniformName::*;
-        match *self {
-            Projection => "projection",
-            Model => "model",
-            OutlineColor => "outline_color",
-            OutlineWidthX => "outline_width_x",
-            OutlineWidthY => "outline_width_y",
-            ModelColorFilter => "model_color_filter",
-            ModelColorBlend => "model_color_blend",
-        }
-    }
+pub trait Uniform: AsRef<str> + ::std::fmt::Debug + Clone + Copy + ::std::hash::Hash + PartialEq + Eq {
 }
 
 #[derive(Debug)]
@@ -59,7 +37,7 @@ impl ShaderLoadError {
 }
 
 impl ::std::fmt::Display for ShaderLoadError {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         write!(f, "error of type {} while loading shader: {}", self.err_type, self.error_message)
     }
 }
@@ -85,40 +63,57 @@ impl ShaderBuildStep {
     }
 }
 
-pub struct Shader{
-    id: GLuint,
-    uniforms: HashMap<UniformName, GLint>,
-}
+pub trait Shader {
+    type R: 'static;
+    type U: Uniform;
 
-impl Shader {
-    fn init_all_uniform_locations(&mut self) {
-        // Model and projection should be initialized and/or set everytime, no need to "init" them here
-        self.init_uniform_location(UniformName::Model);
-        self.init_uniform_location(UniformName::Projection);
-        self.init_uniform_location(UniformName::ModelColorFilter);
-        self.set_vector4(UniformName::ModelColorFilter, Vector4::<f32>::new(1.0, 1.0, 1.0, 1.0), false);
-        self.init_uniform_location(UniformName::ModelColorBlend);
-        self.set_vector4(UniformName::ModelColorBlend, Vector4::<f32>::new(1.0, 1.0, 1.0, 0.0), false);
-        self.init_uniform_location(UniformName::OutlineWidthY);
-        self.set_float(UniformName::OutlineWidthY, -1.0, false);
-        self.init_uniform_location(UniformName::OutlineWidthX);
-        self.set_float(UniformName::OutlineWidthX, -1.0, false);
-        self.init_uniform_location(UniformName::OutlineColor);
-        self.set_vector3(UniformName::OutlineColor, Vector3::<f32>::new(0.0, 0.0, 0.0), false);
+    fn apply_texture_uniforms(&mut self, render_params: &Self::R, texture: &Texture2D);
+
+    fn apply_shape_uniforms(&mut self, render_params: &Self::R, shape: &Shape);
+
+    fn apply_uniforms(&mut self, window_size: (u32, u32));
+
+    fn set_texture_vbo<F>(&mut self, _render_params: &Self::R, _texture: &Texture2D, mut f: F) where F: FnMut(&[f32], usize) {
+        static DEFAULT_VERTICES: [f32; 24] =
+            [0.0, 1.0, 0.0, 1.0, // 0
+            1.0, 0.0, 1.0, 0.0, // 1
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 1.0,
+            1.0, 1.0, 1.0, 1.0,
+            1.0, 0.0, 1.0, 0.0];
+        f(&DEFAULT_VERTICES, 6);
+    }
+    
+    fn set_shape_vbo<F>(&mut self, _render_params: &Self::R, _shape: &Shape, mut f: F) where F: FnMut(&[f32], usize) {
+        static DEFAULT_VERTICES: [f32; 24] =
+            [0.0, 1.0, 0.0, 1.0, // 0
+            1.0, 0.0, 1.0, 0.0, // 1
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 1.0,
+            1.0, 1.0, 1.0, 1.0,
+            1.0, 0.0, 1.0, 0.0];
+        f(&DEFAULT_VERTICES, 6);
     }
 
-    fn init_uniform_location(&mut self, uniform: UniformName) {
-        let name = CString::new(uniform.as_str()).unwrap();
+    fn as_base_shader(&mut self) -> &mut BaseShader<Self::U>;
+
+    fn init_all_uniform_locations(&mut self);
+}
+
+pub struct BaseShader<U: Uniform> {
+    id: GLuint,
+    uniforms: HashMap<U, GLint>,
+}
+
+impl<U: Uniform> BaseShader<U> {
+
+    pub fn init_uniform_location(&mut self, uniform: U) {
+        let name = CString::new(uniform.as_ref()).unwrap();
         let uniform_location = unsafe {gl::GetUniformLocation(self.id, name.as_ptr())};
         if uniform_location < 0 {
             panic!("Error / Invalid location for {:?}: gl returned {}", uniform, uniform_location);
         };
         self.uniforms.insert(uniform, uniform_location);
-    }
-
-    /// creates a Vanilla Shader
-    pub fn vanilla() -> Result<Shader, ShaderLoadError> {
-        Shader::new(FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE)
     }
 
     /// Check that the build step "step" has been completed successfully, otherwise return an
@@ -155,43 +150,49 @@ impl Shader {
         Ok(())
     }
 
-    pub fn set_float(&mut self, name: UniformName, value: GLfloat, use_shader: bool) {
+    pub fn set_uint(&mut self, name: U, value: GLuint) {
         unsafe {
-            if use_shader {
-                self.use_program();
-            }
-            gl::Uniform1f(self.uniforms.get(&name).cloned().unwrap(), value);
-        }
-    }
-
-    pub fn set_vector4(&mut self, name: UniformName, value: Vector4<f32>, use_shader: bool) {
-        unsafe {
-            if use_shader {
-                self.use_program();
-            }
-            gl::Uniform4f(self.uniforms.get(&name).cloned().unwrap(), value.x, value.y, value.z, value.w);
+            gl::Uniform1ui(self.uniforms.get(&name).cloned().expect("uniform location was not initialized"), value);
         }
     }
     
-    pub fn set_vector3(&mut self, name: UniformName, value: Vector3<f32>, use_shader: bool) {
+    pub fn set_int(&mut self, name: U, value: GLint) {
         unsafe {
-            if use_shader {
-                self.use_program();
-            }
-            gl::Uniform3f(self.uniforms.get(&name).cloned().unwrap(), value.x, value.y, value.z);
+            gl::Uniform1i(self.uniforms.get(&name).cloned().expect("uniform location was not initialized"), value);
         }
     }
 
-    pub fn set_matrix4(&mut self, name: UniformName, mat: &Matrix4<f32>, use_shader: bool) {
+    pub fn set_float(&mut self, name: U, value: GLfloat) {
         unsafe {
-            if use_shader {
-                self.use_program();
-            }
-            gl::UniformMatrix4fv(self.uniforms.get(&name).cloned().unwrap(), 1, gl::FALSE, mat as *const _ as *const GLfloat)
+            gl::Uniform1f(self.uniforms.get(&name).cloned().expect("uniform location was not initialized"), value);
         }
-    } 
+    }
 
-    pub fn new(fragment_source: &str, vertex_source: &str) -> Result<Shader, ShaderLoadError> {
+    pub fn set_vector4(&mut self, name: U, value: &Vector4<f32>) {
+        unsafe {
+            gl::Uniform4f(self.uniforms.get(&name).cloned().expect("uniform location was not initialized"), value.x, value.y, value.z, value.w);
+        }
+    }
+    
+    pub fn set_vector3(&mut self, name: U, value: &Vector3<f32>) {
+        unsafe {
+            gl::Uniform3f(self.uniforms.get(&name).cloned().expect("uniform location was not initialized"), value.x, value.y, value.z);
+        }
+    }
+
+    pub fn set_vector2(&mut self, name: U, value: &Vector2<f32>) {
+        unsafe {
+            gl::Uniform2f(self.uniforms.get(&name).cloned().expect("uniform location was not initialized"), value.x, value.y);
+        }
+    }
+
+    pub fn set_matrix4(&mut self, name: U, mat: &Matrix4<f32>) {
+        unsafe {
+            gl::UniformMatrix4fv(self.uniforms.get(&name).cloned().expect("uniform location was not initialized"), 1, gl::FALSE, mat as *const _ as *const GLfloat)
+        }
+    }
+
+    pub fn new(fragment_source: &str, vertex_source: &str) -> Result<BaseShader<U>, ShaderLoadError> {
         unsafe {
             let vertex_shader_id = gl::CreateShader(gl::VERTEX_SHADER);
             let fragment_shader_id = gl::CreateShader(gl::FRAGMENT_SHADER);
@@ -219,12 +220,11 @@ impl Shader {
             gl::DeleteShader(vertex_shader_id);
             gl::DeleteShader(fragment_shader_id);
 
-            let mut shader = Shader {
+            let mut shader = BaseShader {
                 id: program_id,
                 uniforms: HashMap::default()
             };
             shader.use_program();
-            shader.init_all_uniform_locations();
             Ok(shader)
         }
     }

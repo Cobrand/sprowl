@@ -1,3 +1,5 @@
+
+/// Describes an error that might happen when drawing something.
 #[derive(Debug, Fail)]
 pub enum SprowlError {
     #[fail(display = "texture with id {} was not found", _0)]

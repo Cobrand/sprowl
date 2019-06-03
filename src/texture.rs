@@ -2,7 +2,9 @@ use gl;
 use gl::types::*;
 use std::os::raw::*;
 
-/// Represents an OpenGL 2D Texture
+/// Represents an OpenGL 2D Texture.
+///
+/// Should be created via the Canvas, and rarely used manually.
 #[derive(Debug)]
 pub struct Texture2D {
     id: GLuint,
@@ -32,8 +34,8 @@ impl Texture2D {
 
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
 
             gl::BindTexture(gl::TEXTURE_2D, 0);
         }
@@ -49,6 +51,9 @@ impl Texture2D {
     }
 
     pub(crate) fn bind(&self) {
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE0);
+        }
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.id);
         }

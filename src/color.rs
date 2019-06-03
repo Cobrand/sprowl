@@ -27,6 +27,7 @@ pub struct Color<T: ColorType> {
     pub a: T
 }
 
+/// Represents a Color holding values of f32 (0 to 1) or u8 (0 to 255)
 impl<T: ColorType> Color<T> {
     pub fn from_rgba(r: T, g: T, b: T, a: T) -> Color<T> {
         Color {r, g, b, a}
