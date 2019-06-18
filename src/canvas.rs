@@ -94,7 +94,7 @@ impl Canvas {
     ///
     /// May return an error if the shader has not been compiled correctly. This may
     /// happen when your version OpenGL is too old to support fragment and vertex shaders.
-    pub fn new(size: (u32, u32)) -> Result<Canvas, ShaderLoadError> {
+    pub fn new(size: (u32, u32)) -> Canvas {
         type Vertices24 = [GLfloat; 24];
         unsafe {
 
@@ -138,7 +138,7 @@ impl Canvas {
                 size,
             };
             canvas.inner_init();
-            Ok(canvas)
+            canvas
         }
     }
 

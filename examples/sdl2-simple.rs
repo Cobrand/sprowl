@@ -209,7 +209,7 @@ fn main() {
 
     let canvas = {
         let (w, h) = window.size();
-        Canvas::new((w, h)).unwrap()
+        Canvas::new((w, h))
     };
 
     let args = ::std::env::args().skip(1).collect::<Vec<_>>();
