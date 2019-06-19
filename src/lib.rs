@@ -29,6 +29,7 @@ pub mod shader;
 pub mod shaders;
 
 pub use cgmath;
+pub use image;
 
 pub use self::color::*;
 pub use self::canvas::*;
