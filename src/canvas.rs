@@ -1,4 +1,3 @@
-use crate::shader::{ShaderLoadError};
 use crate::texture::Texture2D;
 
 use rusttype::{PositionedGlyph, FontCollection, Font, Scale as FontScale};
@@ -26,7 +25,7 @@ type SprowlErrors = Vec<SprowlError>;
 /// A Canvas doesn't do anything by itself, it MUST be linked to an OpenGL context;
 /// see the sdl2-simple example.
 pub struct Canvas {
-    quad_vao: GLuint,
+    vao: GLuint,
     vbo: GLuint,
     current_texture_id: u32,
     textures: HashMap<u32, Texture2D>,
@@ -98,8 +97,10 @@ impl Canvas {
         type Vertices24 = [GLfloat; 24];
         unsafe {
 
-            let mut quad_vao = ::std::mem::uninitialized();
+            let mut vao = ::std::mem::uninitialized();
             let mut vbo: GLuint = ::std::mem::uninitialized();
+
+            // these vertices will be put in the VBO
             let vertices: Vertices24 = 
                 // Position / Texture
                 [0.0, 1.0, 0.0, 1.0,
@@ -108,14 +109,14 @@ impl Canvas {
                 0.0, 1.0, 0.0, 1.0,
                 1.0, 1.0, 1.0, 1.0,
                 1.0, 0.0, 1.0, 0.0];
-            gl::GenVertexArrays(1, &mut quad_vao);
+            gl::GenVertexArrays(1, &mut vao);
             gl::GenBuffers(1, &mut vbo);
 
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 
             // fill a VBO with the vertices, but allocate up to 4096 times the vertices.
             gl::BufferData(gl::ARRAY_BUFFER, size_of::<Vertices24>() as isize * 4096, &vertices as *const _ as *const c_void, gl::DYNAMIC_DRAW);
-            gl::BindVertexArray(quad_vao);
+            gl::BindVertexArray(vao);
 
             // enable attribute 0 & 1
             gl::EnableVertexAttribArray(0);
@@ -129,7 +130,7 @@ impl Canvas {
             gl::BindVertexArray(0);
             
             let mut canvas = Canvas {
-                quad_vao: quad_vao,
+                vao: vao,
                 vbo,
                 current_texture_id: 0,
                 textures: Default::default(),
@@ -291,7 +292,7 @@ impl Canvas {
 
         unsafe {
             // TODO optimize and only make this call once across all draws?
-            gl::BindVertexArray(self.quad_vao);
+            gl::BindVertexArray(self.vao);
             gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
             gl::BindVertexArray(0);
         }
@@ -315,7 +316,7 @@ impl Canvas {
 
         unsafe {
             // TODO optimize and only make this call once across all draws?
-            gl::BindVertexArray(self.quad_vao);
+            gl::BindVertexArray(self.vao);
             gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
             gl::BindVertexArray(0);
         }
@@ -391,7 +392,7 @@ impl Canvas {
 impl Drop for Canvas {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteVertexArrays(1, &self.quad_vao);
+            gl::DeleteVertexArrays(1, &self.vao);
             gl::DeleteBuffers(1, &self.vbo);
         }
     }
