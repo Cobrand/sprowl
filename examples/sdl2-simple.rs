@@ -55,7 +55,7 @@ fn vanilla(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Ca
                 }
             },
             sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Text { font_id, text: "Pote", font_size: 32.0, color: None },
+                graphic_entity: GraphicEntity::Text { font_id, text: "Pote", font_size: 32.0, color: None, raster_fn: None },
                 render_params: VanillaRenderParams {
                     position: Position { origin: Origin::TopLeft(0, 0), pos_x: 10, pos_y: 10 },
                     rotate: None,
@@ -83,6 +83,13 @@ fn advanced(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: C
 
     let mut outline = false;
     let mut scale = false;
+
+    let alt_raster_fn: ::std::rc::Rc<Fn(f32) -> u8> = ::std::rc::Rc::new(|v: f32| 
+        if v >= 0.5 { 255 }
+        else if v <= 0.0 { 0 }
+        else { (v * 510.0).round() as u8 }
+    );
+
     'running: for t in 0.. {
         let t0 = ::std::time::Instant::now();
         for event in event_pump.poll_iter() {
@@ -160,7 +167,7 @@ fn advanced(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: C
                 }
             },
             sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Text { font_id, text: "Potekek", font_size: 30.0, color: None },
+                graphic_entity: GraphicEntity::Text { font_id, text: "Potekek", font_size: 30.0, color: None, raster_fn: Some(alt_raster_fn.clone()) },
                 render_params: AdvancedRenderParams {
                     position: Position { origin: Origin::Center, pos_x: 0, pos_y: 0 },
                     outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },

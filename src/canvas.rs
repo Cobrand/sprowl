@@ -13,6 +13,7 @@ use gl::types::*;
 use std::os::raw::*;
 use std::mem::size_of;
 use std::ptr;
+use std::rc::Rc;
 
 #[must_use]
 type SprowlErrors = Vec<SprowlError>;
@@ -52,6 +53,8 @@ pub enum GraphicEntity<S: AsRef<str>> {
         font_size: f32,
         // The text that should be printed
         text: S,
+
+        raster_fn: Option<Rc<Fn(f32) -> u8>>,
         // The color that should be used for this text. Default is white.
         color: Option<Color<u8>>,
     }
@@ -322,7 +325,7 @@ impl Canvas {
         }
     }
 
-    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, render_params: &S::R) -> Result<(), SprowlError> {
+    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, raster_fn: Option<&dyn Fn(f32) -> u8>, render_params: &S::R) -> Result<(), SprowlError> {
         let (rgba8_image, width, height) = {
             let font = match self.fonts.get(&font_id) {
                 None => return Err(SprowlError::MissingTextureID(font_id)),
@@ -350,10 +353,16 @@ impl Canvas {
 
                         // some fonts somehow have a value more than 1 sometimes...
                         // so we have to ceil at 1.0
-                        let alpha = if v >= 0.5 {
-                            255
+                        let alpha = if let Some(raster_fn) = raster_fn {
+                            raster_fn(v)
                         } else {
-                            0
+                            if v >= 1.0 {
+                                255
+                            } else if v > 0.0 {
+                                (v * 255.0).round() as u8
+                            } else {
+                                0
+                            }
                         };
                         if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
                             let x = x as u32;
@@ -381,8 +390,16 @@ impl Canvas {
             GraphicEntity::Shape {shape} => {
                 self.draw_shape(shader, &shape, &graphic_el.render_params);
             },
-            GraphicEntity::Text {font_id, font_size, text, color} => {
-                self.draw_text(shader, *font_id, *font_size, text.as_ref(), *color, &graphic_el.render_params)?;
+            GraphicEntity::Text {font_id, font_size, text, color, raster_fn} => {
+                self.draw_text(
+                    shader,
+                    *font_id,
+                    *font_size,
+                    text.as_ref(),
+                    *color,
+                    raster_fn.as_ref().map(|v| v.as_ref()), // hack to make things compile
+                    &graphic_el.render_params
+                )?;
             }
         };
         Ok(())
