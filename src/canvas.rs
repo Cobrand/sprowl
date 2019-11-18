@@ -70,6 +70,7 @@ pub enum Shape {
 /// Represents a given entity (texture, text, shape) with set parameters ready for drawing.
 ///
 /// The parameters depends on the shader you are using.
+#[must_use]
 pub struct GraphicElement<S: AsRef<str>, R> {
     pub graphic_entity: GraphicEntity<S>,
     pub render_params: R,
@@ -259,11 +260,10 @@ impl Canvas {
     /// you are able to have transparent textures.
     pub fn draw<'a, T: AsRef<str> + 'static, S: Shader, I: IntoIterator<Item=&'a GraphicElement<T, S::R>>>(&mut self, shader: &mut S, graphic_elements: I) -> SprowlErrors {
         let mut errors = vec!();
-        // we'll use a program here for now, but it may be wiser to use it less often than 1 per draw()
-        // call, even though "draw" will draw multiple at once.
+        
         shader.as_base_shader().use_program();
-
         shader.apply_uniforms(self.size());
+
         for graphic_el in graphic_elements {
             if let Err(error) = self.draw_graphic_element(shader, graphic_el) {
                 errors.push(error);
