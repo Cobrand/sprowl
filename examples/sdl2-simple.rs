@@ -84,7 +84,7 @@ fn advanced(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: C
     let mut outline = false;
     let mut scale = false;
 
-    let alt_raster_fn: ::std::rc::Rc<Fn(f32) -> u8> = ::std::rc::Rc::new(|v: f32| 
+    let alt_raster_fn: ::std::rc::Rc<dyn Fn(f32) -> u8> = ::std::rc::Rc::new(|v: f32| 
         if v >= 0.5 { 255 }
         else if v <= 0.0 { 0 }
         else { (v * 510.0).round() as u8 }

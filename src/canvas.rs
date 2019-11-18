@@ -11,7 +11,7 @@ use crate::shader::Shader;
 use gl;
 use gl::types::*;
 use std::os::raw::*;
-use std::mem::size_of;
+use std::mem::{size_of, MaybeUninit};
 use std::ptr;
 use std::rc::Rc;
 
@@ -54,7 +54,7 @@ pub enum GraphicEntity<S: AsRef<str>> {
         // The text that should be printed
         text: S,
 
-        raster_fn: Option<Rc<Fn(f32) -> u8>>,
+        raster_fn: Option<Rc<dyn Fn(f32) -> u8>>,
         // The color that should be used for this text. Default is white.
         color: Option<Color<u8>>,
     }
@@ -101,8 +101,8 @@ impl Canvas {
         type Vertices24 = [GLfloat; 24];
         unsafe {
 
-            let mut vao = ::std::mem::uninitialized();
-            let mut vbo: GLuint = ::std::mem::uninitialized();
+            let mut vao: MaybeUninit<u32> = MaybeUninit::uninit();
+            let mut vbo: MaybeUninit<GLuint> = MaybeUninit::uninit();
 
             // these vertices will be put in the VBO
             let vertices: Vertices24 = 
@@ -113,8 +113,11 @@ impl Canvas {
                 0.0, 1.0, 0.0, 1.0,
                 1.0, 1.0, 1.0, 1.0,
                 1.0, 0.0, 1.0, 0.0];
-            gl::GenVertexArrays(1, &mut vao);
-            gl::GenBuffers(1, &mut vbo);
+            gl::GenVertexArrays(1, vao.as_mut_ptr());
+            gl::GenBuffers(1, vbo.as_mut_ptr());
+
+            let vao = vao.assume_init();
+            let vbo = vbo.assume_init();
 
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 

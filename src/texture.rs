@@ -14,11 +14,11 @@ pub struct Texture2D {
 
 impl Texture2D {
     fn gen_texture() -> GLuint {
-        let mut id = unsafe {::std::mem::uninitialized()};
+        let mut id = std::mem::MaybeUninit::uninit();
         unsafe {
-            gl::GenTextures(1, &mut id);
+            gl::GenTextures(1, id.as_mut_ptr());
+            id.assume_init()
         }
-        id
     }
 
     /// the bytes SHOULD be RGBA format. For now.

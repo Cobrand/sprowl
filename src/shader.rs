@@ -9,6 +9,7 @@ pub use crate::Shape;
 use cgmath::{Matrix4, Vector2, Vector3, Vector4};
 
 use std::ffi::{CStr, CString};
+use std::mem::MaybeUninit;
 use std::ptr;
 
 
@@ -120,14 +121,16 @@ impl<U: Uniform> BaseShader<U> {
     /// Error with the proper information
     fn check_build_step(object: GLuint, step: ShaderBuildStep) -> Result<(), ShaderLoadError> {
         unsafe {
-            let mut compile_result = ::std::mem::uninitialized();
-            let mut info_log_length = ::std::mem::uninitialized();
+            let mut compile_result: MaybeUninit<GLint> = MaybeUninit::uninit();
+            let mut info_log_length: MaybeUninit<GLint> = MaybeUninit::uninit();
             match step {
                 ShaderBuildStep::LinkProgram => {
-                    gl::GetProgramiv(object, gl::LINK_STATUS, &mut compile_result);
+                    gl::GetProgramiv(object, gl::LINK_STATUS, compile_result.as_mut_ptr());
+                    let compile_result = compile_result.assume_init();
                     if compile_result != i32::from(gl::TRUE) {
                         // retrieve the error
-                        gl::GetProgramiv(object, gl::INFO_LOG_LENGTH, &mut info_log_length);
+                        gl::GetProgramiv(object, gl::INFO_LOG_LENGTH, info_log_length.as_mut_ptr());
+                        let info_log_length = info_log_length.assume_init();
                         let mut error_message: Vec<c_char> = Vec::with_capacity(info_log_length as usize + 1);
                         gl::GetProgramInfoLog(object, info_log_length, ptr::null_mut(), error_message.as_mut_ptr());
                         let log_message = CStr::from_ptr(error_message.as_ptr());
@@ -135,10 +138,12 @@ impl<U: Uniform> BaseShader<U> {
                     }
                 },
                 _ => {
-                    gl::GetShaderiv(object, gl::COMPILE_STATUS, &mut compile_result);
+                    gl::GetShaderiv(object, gl::COMPILE_STATUS, compile_result.as_mut_ptr());
+                    let compile_result = compile_result.assume_init();
                     if compile_result != i32::from(gl::TRUE) {
                         // retrieve the error
-                        gl::GetShaderiv(object, gl::INFO_LOG_LENGTH, &mut info_log_length);
+                        gl::GetShaderiv(object, gl::INFO_LOG_LENGTH, info_log_length.as_mut_ptr());
+                        let info_log_length = info_log_length.assume_init();
                         let mut error_message: Vec<c_char> = Vec::with_capacity(info_log_length as usize + 1);
                         gl::GetShaderInfoLog(object, info_log_length, ptr::null_mut(), error_message.as_mut_ptr());
                         let log_message = CStr::from_ptr(error_message.as_ptr());
