@@ -37,7 +37,7 @@ pub struct Canvas {
 
 /// Describes something to be drawn with a given shader.
 ///
-/// The big 3 include: a texture, 
+/// The big 3 include: a texture, a shape, a text
 pub enum GraphicEntity<S: AsRef<str>> {
     Texture {
         /// The ID that was returned by add_texture_*
@@ -60,8 +60,29 @@ pub enum GraphicEntity<S: AsRef<str>> {
     }
 }
 
+impl<S: AsRef<str> + std::fmt::Debug> std::fmt::Debug for GraphicEntity<S> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GraphicEntity::Texture { id } => {
+                fmt.debug_struct("GraphicEntity::Texture").field("id", id).finish()
+            }
+            GraphicEntity::Shape { shape } => {
+                fmt.debug_struct("GraphicEntity::Shape").field("shape", shape).finish()
+            },
+            GraphicEntity::Text { font_id, font_size, text, raster_fn, color } => {
+                fmt.debug_struct("GraphicEntity::Text")
+                    .field("font_id", font_id)
+                    .field("font_size", font_size)
+                    .field("text", text)
+                    .field("raster_fn", &raster_fn.is_some())
+                    .field("color", color)
+                    .finish()
+            }
+        }
+    }
+}
+
 /// Represents a simple shape: rect, circle, triangle, ect. Used when you want to draw without a texture.
-///
 #[derive(Debug, Clone, Copy)]
 pub enum Shape {
     Rect(u32, u32),
@@ -74,6 +95,15 @@ pub enum Shape {
 pub struct GraphicElement<S: AsRef<str>, R> {
     pub graphic_entity: GraphicEntity<S>,
     pub render_params: R,
+}
+
+impl<S: AsRef<str> + std::fmt::Debug, R: std::fmt::Debug> std::fmt::Debug for GraphicElement<S, R> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("GraphicElement")
+            .field("graphic_entity", &self.graphic_entity)
+            .field("render_params", &self.render_params)
+            .finish()
+    }
 }
 
 impl Canvas {
