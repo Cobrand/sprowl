@@ -1,7 +1,9 @@
 use crate::texture::Texture2D;
 
-use rusttype::{PositionedGlyph, FontCollection, Font, Scale as FontScale};
+use rusttype::{PositionedGlyph, FontCollection, Scale as FontScale};
 use image::{self, RgbaImage, Rgba, Pixel, GenericImageView};
+
+use crate::font_renderer::FontRenderer;
 
 use std::path::Path;
 use fnv::FnvHashMap as HashMap;
@@ -31,7 +33,7 @@ pub struct Canvas {
     current_texture_id: u32,
     textures: HashMap<u32, Texture2D>,
     current_font_id: u32,
-    fonts: HashMap<u32, Font<'static>>,
+    fonts: HashMap<u32, FontRenderer>,
     size: (u32, u32),
 }
 
@@ -54,7 +56,6 @@ pub enum GraphicEntity<S: AsRef<str>> {
         // The text that should be printed
         text: S,
 
-        raster_fn: Option<Rc<dyn Fn(f32) -> u8>>,
         // The color that should be used for this text. Default is white.
         color: Option<Color<u8>>,
     }
@@ -69,12 +70,11 @@ impl<S: AsRef<str> + std::fmt::Debug> std::fmt::Debug for GraphicEntity<S> {
             GraphicEntity::Shape { shape } => {
                 fmt.debug_struct("GraphicEntity::Shape").field("shape", shape).finish()
             },
-            GraphicEntity::Text { font_id, font_size, text, raster_fn, color } => {
+            GraphicEntity::Text { font_id, font_size, text, color } => {
                 fmt.debug_struct("GraphicEntity::Text")
                     .field("font_id", font_id)
                     .field("font_size", font_size)
                     .field("text", text)
-                    .field("raster_fn", &raster_fn.is_some())
                     .field("color", color)
                     .finish()
             }
@@ -245,7 +245,7 @@ impl Canvas {
     pub fn add_font_from_bytes(&mut self, bytes: &'static [u8]) -> u32 {
         let collection = FontCollection::from_bytes(bytes).expect("wrong font added from static bytes");
         let font = collection.into_font().expect("fatal: collection consists of more than one font"); // only succeeds if collection consists of one font
-        let _v = self.fonts.insert(self.current_font_id, font);
+        let _v = self.fonts.insert(self.current_font_id, FontRenderer::new(font));
         debug_assert!(_v.is_none());
         let font_id = self.current_font_id;
         self.current_font_id += 1;
@@ -358,9 +358,9 @@ impl Canvas {
         }
     }
 
-    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, raster_fn: Option<&dyn Fn(f32) -> u8>, render_params: &S::R) -> Result<(), SprowlError> {
+    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, render_params: &S::R) -> Result<(), SprowlError> {
         let (rgba8_image, width, height) = {
-            let font = match self.fonts.get(&font_id) {
+            let font_renderer = match self.fonts.get(&font_id) {
                 None => return Err(SprowlError::MissingTextureID(font_id)),
                 Some(font) => font
             };
@@ -369,10 +369,10 @@ impl Canvas {
 
             let font_color: Color<u8> = font_color.unwrap_or_else(Color::white);
 
-            let v_metrics = font.v_metrics(scale);
+            let v_metrics = font_renderer.font.v_metrics(scale);
 
             let offset = ::rusttype::point(0.0, v_metrics.ascent);
-            let glyphs: Vec<PositionedGlyph<'_>> = font.layout(text, scale, offset).collect();
+            let glyphs: Vec<PositionedGlyph<'_>> = font_renderer.font.layout(text, scale, offset).collect();
             let width = glyphs.iter().rev().map(|g| {
                 g.position().x as f32 + g.unpositioned().h_metrics().advance_width
             }).next().unwrap_or(0.0).ceil();
@@ -386,16 +386,12 @@ impl Canvas {
 
                         // some fonts somehow have a value more than 1 sometimes...
                         // so we have to ceil at 1.0
-                        let alpha = if let Some(raster_fn) = raster_fn {
-                            raster_fn(v)
+                        let alpha = if v >= 1.0 {
+                            255
+                        } else if v > 0.0 {
+                            (v * 255.0).round() as u8
                         } else {
-                            if v >= 1.0 {
-                                255
-                            } else if v > 0.0 {
-                                (v * 255.0).round() as u8
-                            } else {
-                                0
-                            }
+                            0
                         };
                         if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
                             let x = x as u32;
@@ -423,14 +419,13 @@ impl Canvas {
             GraphicEntity::Shape {shape} => {
                 self.draw_shape(shader, &shape, &graphic_el.render_params);
             },
-            GraphicEntity::Text {font_id, font_size, text, color, raster_fn} => {
+            GraphicEntity::Text {font_id, font_size, text, color} => {
                 self.draw_text(
                     shader,
                     *font_id,
                     *font_size,
                     text.as_ref(),
                     *color,
-                    raster_fn.as_ref().map(|v| v.as_ref()), // hack to make things compile
                     &graphic_el.render_params
                 )?;
             }

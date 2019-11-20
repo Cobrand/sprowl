@@ -24,7 +24,7 @@ impl Texture2D {
     /// the bytes SHOULD be RGBA format. For now.
     ///
     /// unexpected behavior if width and height don't match
-    pub(crate) fn from_bytes(bytes: &[u8], dims: (u32, u32), ) -> Texture2D {
+    pub (crate) fn from_bytes(bytes: &[u8], dims: (u32, u32), ) -> Texture2D {
         debug_assert!(bytes.len() > dims.0 as usize * dims.1 as usize);
         let (width, height) = (dims.0 as GLuint, dims.1 as GLuint);
         let texture_id = Self::gen_texture();

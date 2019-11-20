@@ -22,6 +22,8 @@ mod texture;
 mod canvas;
 mod error;
 
+mod font_renderer;
+
 /// Everything to use shaders and build your own.
 pub mod shader;
 

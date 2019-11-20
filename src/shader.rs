@@ -74,17 +74,25 @@ pub trait Shader {
 
     fn apply_uniforms(&mut self, window_size: (u32, u32));
 
+    /// Set the VBO for a draw texture operation
     fn set_texture_vbo<F>(&mut self, _render_params: &Self::R, _texture: &Texture2D, mut f: F) where F: FnMut(&[f32], usize) {
         static DEFAULT_VERTICES: [f32; 24] =
-            [0.0, 1.0, 0.0, 1.0, // 0
-            1.0, 0.0, 1.0, 0.0, // 1
+            // [0.0, 1.0, 0.0, 1.0, // 0
+            // 1.0, 0.0, 1.0, 0.0, // 1
+            // 0.0, 0.0, 0.0, 0.0,
+            // 0.0, 1.0, 0.0, 1.0,
+            // 1.0, 1.0, 1.0, 1.0,
+            // 1.0, 0.0, 1.0, 0.0];
+            [0.0, 1.0, 0.0, 0.5, // 0
+            1.0, 0.0, 0.5, 0.0, // 1
             0.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 1.0,
-            1.0, 1.0, 1.0, 1.0,
-            1.0, 0.0, 1.0, 0.0];
+            0.0, 1.0, 0.0, 0.5,
+            1.0, 1.0, 0.5, 0.5,
+            1.0, 0.0, 0.5, 0.0];
         f(&DEFAULT_VERTICES, 6);
     }
-    
+
+    /// Set the VBO for a draw shape operation
     fn set_shape_vbo<F>(&mut self, _render_params: &Self::R, _shape: &Shape, mut f: F) where F: FnMut(&[f32], usize) {
         static DEFAULT_VERTICES: [f32; 24] =
             [0.0, 1.0, 0.0, 1.0, // 0
@@ -94,6 +102,22 @@ pub trait Shader {
             1.0, 1.0, 1.0, 1.0,
             1.0, 0.0, 1.0, 0.0];
         f(&DEFAULT_VERTICES, 6);
+    }
+
+    /// Set the VBO for a "draw from a cache texture" operation.
+    ///
+    /// x, y, w, h should be between 0.0 and 1.0
+    fn set_cache_extract_vbo<F>(&mut self, _render_params: &Self::R, (x, y, w, h): (f32, f32, f32, f32), mut f: F) where F: FnMut(&[f32], usize) {
+        let (left, right) = (x, x + w);
+        let (top, bottom) = (y, y + h); 
+        f(&[
+            left, bottom, left, bottom,
+            right, top, right, top,
+            left, top, left, top,
+            left, bottom, left, bottom,
+            right, bottom, right, bottom,
+            right, top, right, top,
+        ], 6);
     }
 
     fn as_base_shader(&mut self) -> &mut BaseShader<Self::U>;
