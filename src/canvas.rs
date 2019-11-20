@@ -15,7 +15,6 @@ use gl::types::*;
 use std::os::raw::*;
 use std::mem::{size_of, MaybeUninit};
 use std::ptr;
-use std::rc::Rc;
 
 #[must_use]
 type SprowlErrors = Vec<SprowlError>;
@@ -326,6 +325,37 @@ impl Canvas {
             vert_n = vertices_n as GLsizei;
         });
 
+        unsafe {
+            // TODO optimize and only make this call once across all draws?
+            gl::BindVertexArray(self.vao);
+            gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
+            gl::BindVertexArray(0);
+        }
+    }
+
+    fn draw_cache_chunk<S: Shader>(&self, shader: &mut S, texture: &Texture2D, (x, y, w, h): (i32, i32, u32, u32), render_params: &S::R) {
+        shader.apply_texture_uniforms(render_params, texture);
+        let (tex_w, tex_h) = texture.size();
+        let mut vert_n: GLsizei = 0;
+        let (x, y, w, h) = (
+            x as f32 / tex_w as f32,
+            y as f32 / tex_h as f32, 
+            w as f32 / tex_w as f32,
+            h as f32 / tex_h as f32
+        );
+        shader.set_cache_extract_vbo(render_params, (x, y, w, h), |vertices: &[f32], vertices_n| {
+            let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
+
+            unsafe {
+                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+                // replace data of the vbo by the given data
+                gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
+                gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            }
+
+            vert_n = vertices_n as GLsizei;
+        });
+        
         unsafe {
             // TODO optimize and only make this call once across all draws?
             gl::BindVertexArray(self.vao);
