@@ -57,7 +57,7 @@ fn vanilla(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Ca
                 }
             },
             GraphicElement {
-                render_stem: RenderStem::Text { font_id, text: "Pote", font_size: 32.0, color: None },
+                render_stem: RenderStem::Text { font_id, text: "Pote", font_size: 32.0, max_width: None },
                 render_params: RenderParams {
                     custom: Default::default(),
                     common: CommonRenderParams::new(DrawPos { origin: Origin::TopLeft(0, 0), x: 10, y: 10 }),
@@ -171,7 +171,7 @@ fn advanced(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: C
                 }
             },
             GraphicElement {
-                render_stem: RenderStem::Text { font_id, text: "Potekek", font_size: 30.0, color: None },
+                render_stem: RenderStem::Text { font_id, text: "Potekek", font_size: 30.0, max_width: None },
                 render_params: RenderParams {
                     common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: 0, y: 0 }),
                     custom: AdvancedRenderParams {

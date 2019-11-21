@@ -12,6 +12,28 @@ pub struct Texture2D {
     height: GLuint,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum TextureFormat {
+    RGBA,
+    Greyscale,
+}
+
+impl TextureFormat {
+    fn to_gl_format(&self) -> gl::types::GLenum {
+        match self {
+            TextureFormat::Greyscale => gl::RED,
+            TextureFormat::RGBA => gl::RGBA,
+        }
+    }
+
+    fn bytes(&self) -> usize {
+        match self {
+            TextureFormat::Greyscale => 1,
+            TextureFormat::RGBA => 4,
+        }
+    }
+}
+
 impl Texture2D {
     fn gen_texture() -> GLuint {
         let mut id = std::mem::MaybeUninit::uninit();
@@ -25,12 +47,16 @@ impl Texture2D {
     ///
     /// unexpected behavior if width and height don't match
     pub (crate) fn from_bytes(bytes: &[u8], dims: (u32, u32), ) -> Texture2D {
-        debug_assert!(bytes.len() > dims.0 as usize * dims.1 as usize);
+        Self::from_bytes_with_format(bytes, dims, TextureFormat::RGBA)
+    }
+
+    pub (crate) fn from_bytes_with_format(bytes: &[u8], dims: (u32, u32), format: TextureFormat) -> Texture2D {
+        debug_assert!(bytes.len() >= dims.0 as usize * dims.1 as usize * format.bytes());
         let (width, height) = (dims.0 as GLuint, dims.1 as GLuint);
         let texture_id = Self::gen_texture();
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, texture_id);
-            gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, gl::RGBA, gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void);
+            gl::TexImage2D(gl::TEXTURE_2D, 0, format.to_gl_format() as i32, width as i32, height as i32, 0, format.to_gl_format(), gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void);
 
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
@@ -46,10 +72,8 @@ impl Texture2D {
         }
     }
 
-    /// the bytes SHOULD be RGBA format.
-    ///
     /// unexpected behavior if width and height don't match the bytes
-    pub fn update(&mut self, bytes: &[u8], x: i32, y: i32, width: u32, height: u32) {
+    pub fn update_greyscale(&mut self, bytes: &[u8], x: i32, y: i32, width: u32, height: u32) {
         debug_assert!(bytes.len() > width as usize * height as usize);
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.id);

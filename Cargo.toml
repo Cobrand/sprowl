@@ -12,5 +12,7 @@ cgmath = "^0.17"
 rusttype = { version = "^0.8", features = ["std", "gpu_cache"] }
 hashbrown = "^0.6"
 
+linked-hash-map = "^0.5"
+
 [dev-dependencies]
 sdl2 = "^0.32"

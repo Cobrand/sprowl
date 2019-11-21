@@ -184,16 +184,6 @@ impl Canvas {
         font_id
     }
 
-    // fn apply_view_matrix<R: RenderParams>(&mut self, shader: &mut BaseShader<R>) {
-    //     let view_matrix = view_matrix(
-    //         0,
-    //         0,
-    //         self.size.0,
-    //         self.size.1,
-    //     );
-    //     shader.set_matrix4(R::U::view(), &view_matrix);
-    // }
-
     /// Sets the Canvas' size in pixels.
     pub fn set_size(&mut self, new_size: (u32, u32)) {
         self.size = new_size;
@@ -321,54 +311,78 @@ impl Canvas {
         }
     }
 
-    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, render_params: &RenderParams<S::R>) -> Result<(), SprowlError> {
-        let (rgba8_image, width, height) = {
-            let font_renderer = match self.fonts.get(&font_id) {
-                None => return Err(SprowlError::MissingTextureId(font_id)),
-                Some(font) => font
-            };
+    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, max_width: Option<u32>, render_params: &RenderParams<S::R>) -> Result<(), SprowlError> {
+        /*let (greyscale_image, width, height) = */{
+            let font_renderer = self.fonts.get_mut(&font_id).ok_or(SprowlError::MissingTextureId(font_id))?;
+            
             let pixel_height = font_size.ceil() as usize;
             let scale = FontScale::uniform(font_size);
 
-            let font_color: Color<u8> = font_color.unwrap_or_else(Color::white);
+            let glyphs = crate::font_renderer::layout_paragraph(&font_renderer.font, scale, max_width.unwrap_or(u32::max_value()), text);
 
-            let v_metrics = font_renderer.font.v_metrics(scale);
+            let c: &mut rusttype::gpu_cache::Cache<'static> = &mut font_renderer.font_cache_data;
+            // for glyph in &glyphs {
+            //     c.queue_glyph(0, glyph.clone());
+            // }
+            // font_renderer.font_cache_data.cache_queued(|rect, data| {
+            //     // font_renderer.texture
+            // });
 
-            let offset = ::rusttype::point(0.0, v_metrics.ascent);
-            let glyphs: Vec<PositionedGlyph<'_>> = font_renderer.font.layout(text, scale, offset).collect();
-            let width = glyphs.iter().rev().map(|g| {
-                g.position().x as f32 + g.unpositioned().h_metrics().advance_width
-            }).next().unwrap_or(0.0).ceil();
-            let mut rgba8_image = RgbaImage::new(width as u32, pixel_height as u32);
-            for glyph in glyphs {
-                if let Some(bb) = glyph.pixel_bounding_box() {
-                    // TODO: instead of drawing every frame, use gpu_cache from rusttype.
-                    glyph.draw(|x, y, v| {
-                        let x = x as i32 + bb.min.x;
-                        let y = y as i32 + bb.min.y;
+            // cache.cache_queued(|rect, data| {
+            //     cache_tex.main_level().write(
+            //         glium::Rect {
+            //             left: rect.min.x,
+            //             bottom: rect.min.y,
+            //             width: rect.width(),
+            //             height: rect.height(),
+            //         },
+            //         glium::texture::RawImage2d {
+            //             data: Cow::Borrowed(data),
+            //             width: rect.width(),
+            //             height: rect.height(),
+            //             format: glium::texture::ClientFormat::U8,
+            //         },
+            //     );
+            // })?;
 
-                        // some fonts somehow have a value more than 1 sometimes...
-                        // so we have to ceil at 1.0
-                        let alpha = if v >= 1.0 {
-                            255
-                        } else if v > 0.0 {
-                            (v * 255.0).round() as u8
-                        } else {
-                            0
-                        };
-                        if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
-                            let x = x as u32;
-                            let y = y as u32;
-                            rgba8_image.put_pixel(x, y, Rgba::from_channels(font_color.r, font_color.g, font_color.b, alpha));
-                        }
-                    })
-                }
-            };
-            (rgba8_image, width, pixel_height)
+
+        //     let v_metrics = font_renderer.font.v_metrics(scale);
+
+        //     let offset = ::rusttype::point(0.0, v_metrics.ascent);
+        //     let glyphs: Vec<PositionedGlyph<'_>> = font_renderer.font.layout(text, scale, offset).collect();
+        //     let width = glyphs.iter().rev().map(|g| {
+        //         g.position().x as f32 + g.unpositioned().h_metrics().advance_width
+        //     }).next().unwrap_or(0.0).ceil();
+        //     let mut rgba8_image = RgbaImage::new(width as u32, pixel_height as u32);
+        //     for glyph in glyphs {
+        //         if let Some(bb) = glyph.pixel_bounding_box() {
+        //             // TODO: instead of drawing every frame, use gpu_cache from rusttype.
+        //             glyph.draw(|x, y, v| {
+        //                 let x = x as i32 + bb.min.x;
+        //                 let y = y as i32 + bb.min.y;
+
+        //                 // some fonts somehow have a value more than 1 sometimes...
+        //                 // so we have to ceil at 1.0
+        //                 let alpha = if v >= 1.0 {
+        //                     255
+        //                 } else if v > 0.0 {
+        //                     (v * 255.0).round() as u8
+        //                 } else {
+        //                     0
+        //                 };
+        //                 if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
+        //                     let x = x as u32;
+        //                     let y = y as u32;
+        //                     rgba8_image.put_pixel(x, y, Rgba::from_channels(font_color.r, font_color.g, font_color.b, alpha));
+        //                 }
+        //             })
+        //         }
+        //     };
+        //     (rgba8_image, width, pixel_height)
         };
-        let texture = Texture2D::from_bytes(&*rgba8_image, (width as u32, height as u32));
-        texture.bind();
-        self.draw_bound_texture(shader, &texture, render_params);
+        // // let texture = Texture2D::from_bytes(&*rgba8_image, (width as u32, height as u32));
+        // texture.bind();
+        // self.draw_bound_texture(shader, &texture, render_params);
         Ok(())
     }
 
@@ -382,13 +396,13 @@ impl Canvas {
             RenderStem::Shape {shape} => {
                 self.draw_shape(shader, &shape, &graphic_el.render_params);
             },
-            RenderStem::Text {font_id, font_size, text, color} => {
+            RenderStem::Text {font_id, font_size, text, max_width} => {
                 self.draw_text(
                     shader,
                     *font_id,
                     *font_size,
                     text.as_ref(),
-                    *color,
+                    *max_width,
                     &graphic_el.render_params
                 )?;
             }

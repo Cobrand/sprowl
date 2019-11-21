@@ -1,5 +1,5 @@
 use crate::shader::{Uniform, BaseShader, Shader, ShaderLoadError};
-use crate::render::{RenderParams, RenderSource, Texture2D, DrawPos, Origin, Shape};
+use crate::render::{RenderParams, RenderSource, DrawPos, Origin};
 use crate::color::Color;
 
 
