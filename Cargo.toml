@@ -1,17 +1,16 @@
 [package]
 name = "sprowl"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Cobrand <cobrandw@gmail.com>"]
 license = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
-image = "^0.22"
+image = { version = "^0.22", default-features = false, features = ["png_codec", "bmp"]}
 gl = "^0.14"
 cgmath = "^0.17"
 rusttype = { version = "^0.8", features = ["std", "gpu_cache"] }
-fnv = "^1.0"
-failure = "^0.1"
+hashbrown = "^0.6"
 
 [dev-dependencies]
 sdl2 = "^0.32"

@@ -9,6 +9,7 @@ uniform vec4 background_color;
 uniform sampler2D img;
 uniform uint effect;
 uniform float t;
+uniform uint is_grayscale;
 
 void main()
 {
@@ -27,6 +28,9 @@ void main()
     if (effect == uint(2)) {
         // solid colored shape
         color = background_color;
+        return;
+    }
+    if (is_grayscale == uint(1)) {
         return;
     }
 

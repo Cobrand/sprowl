@@ -1,10 +1,9 @@
 use gl;
 use gl::types::*;
 use std::os::raw::*;
-use fnv::FnvHashMap as HashMap;
+use hashbrown::HashMap;
 
-pub use crate::texture::Texture2D;
-pub use crate::Shape;
+use crate::render::{RenderParams, RenderSource};
 
 use cgmath::{Matrix4, Vector2, Vector3, Vector4};
 
@@ -68,14 +67,13 @@ pub trait Shader {
     type R: 'static;
     type U: Uniform;
 
-    fn apply_texture_uniforms(&mut self, render_params: &Self::R, texture: &Texture2D);
+    fn apply_draw_uniforms(&mut self, render_params: &RenderParams<Self::R>, source: RenderSource<'_>);
 
-    fn apply_shape_uniforms(&mut self, render_params: &Self::R, shape: &Shape);
-
-    fn apply_uniforms(&mut self, window_size: (u32, u32));
+    /// Apply uniforms for the current frame
+    fn apply_global_uniforms(&mut self, window_size: (u32, u32));
 
     /// Set the VBO for a draw texture operation
-    fn set_texture_vbo<F>(&mut self, _render_params: &Self::R, _texture: &Texture2D, mut f: F) where F: FnMut(&[f32], usize) {
+    fn set_draw_vbo<F>(&mut self, _render_params: &RenderParams<Self::R>, _source: RenderSource<'_>, f: F) where F: FnOnce(&[f32], usize) {
         static DEFAULT_VERTICES: [f32; 24] =
             [0.0, 1.0, 0.0, 1.0, // 0
             1.0, 0.0, 1.0, 0.0, // 1
@@ -84,34 +82,6 @@ pub trait Shader {
             1.0, 1.0, 1.0, 1.0,
             1.0, 0.0, 1.0, 0.0];
         f(&DEFAULT_VERTICES, 6);
-    }
-
-    /// Set the VBO for a draw shape operation
-    fn set_shape_vbo<F>(&mut self, _render_params: &Self::R, _shape: &Shape, mut f: F) where F: FnMut(&[f32], usize) {
-        static DEFAULT_VERTICES: [f32; 24] =
-            [0.0, 1.0, 0.0, 1.0, // 0
-            1.0, 0.0, 1.0, 0.0, // 1
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 1.0,
-            1.0, 1.0, 1.0, 1.0,
-            1.0, 0.0, 1.0, 0.0];
-        f(&DEFAULT_VERTICES, 6);
-    }
-
-    /// Set the VBO for a "draw from a cache texture" operation.
-    ///
-    /// x, y, w, h should be between 0.0 and 1.0
-    fn set_cache_extract_vbo<F>(&mut self, _render_params: &Self::R, (x, y, w, h): (f32, f32, f32, f32), mut f: F) where F: FnMut(&[f32], usize) {
-        let (left, right) = (x, x + w);
-        let (top, bottom) = (y, y + h); 
-        f(&[
-            left, bottom, left, bottom,
-            right, top, right, top,
-            left, top, left, top,
-            left, bottom, left, bottom,
-            right, bottom, right, bottom,
-            right, top, right, top,
-        ], 6);
     }
 
     fn as_base_shader(&mut self) -> &mut BaseShader<Self::U>;

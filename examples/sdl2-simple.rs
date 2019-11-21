@@ -1,10 +1,10 @@
-use sdl2;
-use sprowl;
-use gl;
-
 use sdl2::keyboard::Keycode;
 use sdl2::event::{Event, WindowEvent};
-use sprowl::*;
+use sprowl::{
+    color::Color,
+    render::*,
+    Canvas
+};
 
 fn vanilla(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas) {
     use sprowl::shaders::vanilla::*;
@@ -46,19 +46,21 @@ fn vanilla(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Ca
         }
         canvas.clear(Some(Color::from_rgb(128u8, 128, 128)));
 
-        let graphic_elements: Vec<sprowl::GraphicElement<&'static str, VanillaRenderParams>> = vec!(
-            sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Texture { id: stick_id },
-                render_params: VanillaRenderParams {
-                    position: Position { origin: Origin::Center, pos_x: entity_x, pos_y: entity_y },
-                    rotate: Some(RotateOptions { origin: Origin::Center, angle: (t % 360) as f32 })
+        let graphic_elements: Vec<GraphicElement<&'static str, VanillaRenderParams>> = vec!(
+            GraphicElement {
+                render_stem: RenderStem::Texture { id: stick_id },
+                render_params: RenderParams {
+                    custom: VanillaRenderParams {
+                        rotate: Some(RotateOptions { origin: Origin::Center, angle: (t % 360) as f32 })
+                    },
+                    common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: entity_x, y: entity_y })
                 }
             },
-            sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Text { font_id, text: "Pote", font_size: 32.0, color: None },
-                render_params: VanillaRenderParams {
-                    position: Position { origin: Origin::TopLeft(0, 0), pos_x: 10, pos_y: 10 },
-                    rotate: None,
+            GraphicElement {
+                render_stem: RenderStem::Text { font_id, text: "Pote", font_size: 32.0, color: None },
+                render_params: RenderParams {
+                    custom: Default::default(),
+                    common: CommonRenderParams::new(DrawPos { origin: Origin::TopLeft(0, 0), x: 10, y: 10 }),
                 }
             },
         );
@@ -107,70 +109,79 @@ fn advanced(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: C
         }
         canvas.clear(Some(Color::from_rgb(128u8, 128, 128)));
 
-        let graphic_elements: Vec<sprowl::GraphicElement<&'static str, AdvancedRenderParams>> = vec!(
-            sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Texture { id: shapes_id },
-                render_params: AdvancedRenderParams {
-                    position: Position { origin: Origin::Center , pos_x: 300, pos_y: 300 },
-                    outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
-                    crop: None,
-                    rotate: None,
-                    scale: None,
-                    effect: 0,
-                    background_color: None,
-                    t: t as f32 / 10.0,
+        let graphic_elements: Vec<GraphicElement<&'static str, AdvancedRenderParams>> = vec!(
+            GraphicElement {
+                render_stem: RenderStem::Texture { id: shapes_id },
+                render_params: RenderParams {
+                    common: CommonRenderParams::new(DrawPos { origin: Origin::Center , x: 300, y: 300 }),
+                    custom: AdvancedRenderParams {
+                        outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
+                        rotate: None,
+                        scale: None,
+                        effect: 0,
+                        background_color: None,
+                        t: t as f32 / 10.0,
+                    }
                 }
             },
-            sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Texture { id: characters_id },
-                render_params: AdvancedRenderParams {
-                    position: Position { origin: Origin::TopLeft(0, 0) , pos_x: 100, pos_y: 100 },
-                    outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
-                    crop: Some((32, 160, 32, 32)),
-                    rotate: Some((t as f32, Origin::Center)),
-                    scale: if scale { Some(3.0) } else { None },
-                    effect: 0,
-                    background_color: None,
-                    t: t as f32 / 10.0,
+            GraphicElement {
+                render_stem: RenderStem::Texture { id: characters_id },
+                render_params: RenderParams {
+                    common: CommonRenderParams {
+                        crop: Some((32, 160, 32, 32)),
+                        draw_pos: DrawPos { origin: Origin::new(), x: 100, y: 100 },
+                        is_source_grayscale: false,
+                    },
+                    custom: AdvancedRenderParams {
+                        outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
+                        rotate: Some((t as f32, Origin::Center)),
+                        scale: if scale { Some(3.0) } else { None },
+                        effect: 0,
+                        background_color: None,
+                        t: t as f32 / 10.0,
+                    }
                 }
             },
-            sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Shape { shape: crate::Shape::Rect(200, 100) },
-                render_params: AdvancedRenderParams {
-                    position: Position { origin: Origin::Center, pos_x: 200, pos_y: 200 },
-                    outline: None,
-                    crop: None,
-                    rotate: None,
-                    scale: None,
-                    effect: 1,
-                    background_color: None,
-                    t: t as f32 / 10.0,
+            GraphicElement {
+                render_stem: RenderStem::Shape { shape: crate::Shape::Rect(200, 100) },
+                render_params: RenderParams {
+                    common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: 200, y: 200 }),
+                    custom: AdvancedRenderParams {
+                        outline: None,
+                        rotate: None,
+                        scale: None,
+                        effect: 1,
+                        background_color: None,
+                        t: t as f32 / 10.0,
+                    }
                 }
             },
-            sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Shape { shape: crate::Shape::Rect(50, 50) },
-                render_params: AdvancedRenderParams {
-                    position: Position { origin: Origin::Center, pos_x: 300, pos_y: 300 },
-                    outline: None,
-                    crop: None,
-                    rotate: None,
-                    scale: None,
-                    effect: 2,
-                    background_color: Some(Color::from_rgba(64, 64, 64u8, 255u8)),
-                    t: t as f32 / 10.0,
+            GraphicElement {
+                render_stem: RenderStem::Shape { shape: crate::Shape::Rect(50, 50) },
+                render_params: RenderParams {
+                    common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: 300, y: 300 }),
+                    custom: AdvancedRenderParams {
+                        outline: None,
+                        rotate: None,
+                        scale: None,
+                        effect: 2,
+                        background_color: Some(Color::from_rgba(64, 64, 64u8, 255u8)),
+                        t: t as f32 / 10.0,
+                    }
                 }
             },
-            sprowl::GraphicElement {
-                graphic_entity: GraphicEntity::Text { font_id, text: "Potekek", font_size: 30.0, color: None },
-                render_params: AdvancedRenderParams {
-                    position: Position { origin: Origin::Center, pos_x: 0, pos_y: 0 },
-                    outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
-                    crop: None,
-                    rotate: Some((3.0 * t as f32, Origin::Center)),
-                    scale: if scale { Some(3.0) } else { None },
-                    effect: 0,
-                    background_color: Some(Color::from_rgb(128u8, 128u8, 128u8)),
-                    t: t as f32 / 10.0,
+            GraphicElement {
+                render_stem: RenderStem::Text { font_id, text: "Potekek", font_size: 30.0, color: None },
+                render_params: RenderParams {
+                    common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: 0, y: 0 }),
+                    custom: AdvancedRenderParams {
+                        outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
+                        rotate: Some((3.0 * t as f32, Origin::Center)),
+                        scale: if scale { Some(3.0) } else { None },
+                        effect: 0,
+                        background_color: Some(Color::from_rgb(128u8, 128u8, 128u8)),
+                        t: t as f32 / 10.0,
+                    }
                 }
             },
         );

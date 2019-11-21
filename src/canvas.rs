@@ -6,10 +6,12 @@ use image::{self, RgbaImage, Rgba, Pixel, GenericImageView};
 use crate::font_renderer::FontRenderer;
 
 use std::path::Path;
-use fnv::FnvHashMap as HashMap;
+use hashbrown::HashMap;
 use crate::color::*;
 use crate::error::{SprowlError};
 use crate::shader::Shader;
+use crate::render::{RenderParams, Shape};
+use crate::gelem::*;
 use gl;
 use gl::types::*;
 use std::os::raw::*;
@@ -34,75 +36,6 @@ pub struct Canvas {
     current_font_id: u32,
     fonts: HashMap<u32, FontRenderer>,
     size: (u32, u32),
-}
-
-/// Describes something to be drawn with a given shader.
-///
-/// The big 3 include: a texture, a shape, a text
-pub enum GraphicEntity<S: AsRef<str>> {
-    Texture {
-        /// The ID that was returned by add_texture_*
-        id: u32,
-    },
-    Shape {
-        shape: Shape,
-    },
-    Text {
-        /// The ID that was returned by add_font_*
-        font_id: u32,
-        // The font size, in pixels
-        font_size: f32,
-        // The text that should be printed
-        text: S,
-
-        // The color that should be used for this text. Default is white.
-        color: Option<Color<u8>>,
-    }
-}
-
-impl<S: AsRef<str> + std::fmt::Debug> std::fmt::Debug for GraphicEntity<S> {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GraphicEntity::Texture { id } => {
-                fmt.debug_struct("GraphicEntity::Texture").field("id", id).finish()
-            }
-            GraphicEntity::Shape { shape } => {
-                fmt.debug_struct("GraphicEntity::Shape").field("shape", shape).finish()
-            },
-            GraphicEntity::Text { font_id, font_size, text, color } => {
-                fmt.debug_struct("GraphicEntity::Text")
-                    .field("font_id", font_id)
-                    .field("font_size", font_size)
-                    .field("text", text)
-                    .field("color", color)
-                    .finish()
-            }
-        }
-    }
-}
-
-/// Represents a simple shape: rect, circle, triangle, ect. Used when you want to draw without a texture.
-#[derive(Debug, Clone, Copy)]
-pub enum Shape {
-    Rect(u32, u32),
-}
-
-/// Represents a given entity (texture, text, shape) with set parameters ready for drawing.
-///
-/// The parameters depends on the shader you are using.
-#[must_use]
-pub struct GraphicElement<S: AsRef<str>, R> {
-    pub graphic_entity: GraphicEntity<S>,
-    pub render_params: R,
-}
-
-impl<S: AsRef<str> + std::fmt::Debug, R: std::fmt::Debug> std::fmt::Debug for GraphicElement<S, R> {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct("GraphicElement")
-            .field("graphic_entity", &self.graphic_entity)
-            .field("render_params", &self.render_params)
-            .finish()
-    }
 }
 
 impl Canvas {
@@ -290,11 +223,11 @@ impl Canvas {
     /// buffer and test method with the z-axis of opengl, because the depth buffer works extremely
     /// poorly with transparency. At the cost of sorting yourself all the textures you want,
     /// you are able to have transparent textures.
-    pub fn draw<'a, T: AsRef<str> + 'static, S: Shader, I: IntoIterator<Item=&'a GraphicElement<T, S::R>>>(&mut self, shader: &mut S, graphic_elements: I) -> SprowlErrors {
+    pub fn draw<'a, T: AsRef<str> + 'a, S: Shader, I: IntoIterator<Item=&'a GraphicElement<T, S::R>>>(&mut self, shader: &mut S, graphic_elements: I) -> SprowlErrors {
         let mut errors = vec!();
         
         shader.as_base_shader().use_program();
-        shader.apply_uniforms(self.size());
+        shader.apply_global_uniforms(self.size());
 
         for graphic_el in graphic_elements {
             if let Err(error) = self.draw_graphic_element(shader, graphic_el) {
@@ -304,15 +237,15 @@ impl Canvas {
         errors
     }
 
-    fn draw_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &S::R) {
+    fn draw_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>) {
         texture.bind();
         self.draw_bound_texture(shader, texture, render_params)
     }
 
-    fn draw_bound_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &S::R) {
-        shader.apply_texture_uniforms(render_params, texture);
+    fn draw_bound_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>) {
+        shader.apply_draw_uniforms(render_params, texture.into());
         let mut vert_n: GLsizei = 0;
-        shader.set_texture_vbo(render_params, texture, |vertices: &[f32], vertices_n| {
+        shader.set_draw_vbo(render_params, texture.into(), |vertices: &[f32], vertices_n| {
             let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
 
             unsafe {
@@ -333,41 +266,41 @@ impl Canvas {
         }
     }
 
-    fn draw_cache_chunk<S: Shader>(&self, shader: &mut S, texture: &Texture2D, (x, y, w, h): (i32, i32, u32, u32), render_params: &S::R) {
-        shader.apply_texture_uniforms(render_params, texture);
-        let (tex_w, tex_h) = texture.size();
-        let mut vert_n: GLsizei = 0;
-        let (x, y, w, h) = (
-            x as f32 / tex_w as f32,
-            y as f32 / tex_h as f32, 
-            w as f32 / tex_w as f32,
-            h as f32 / tex_h as f32
-        );
-        shader.set_cache_extract_vbo(render_params, (x, y, w, h), |vertices: &[f32], vertices_n| {
-            let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
+    // fn draw_cache_chunk<S: Shader>(&self, shader: &mut S, texture: &Texture2D, (x, y, w, h): (i32, i32, u32, u32), render_params: &S::R) {
+    //     shader.apply_draw_uniforms(render_params, texture);
+    //     let (tex_w, tex_h) = texture.size();
+    //     let mut vert_n: GLsizei = 0;
+    //     let (x, y, w, h) = (
+    //         x as f32 / tex_w as f32,
+    //         y as f32 / tex_h as f32, 
+    //         w as f32 / tex_w as f32,
+    //         h as f32 / tex_h as f32
+    //     );
+    //     shader.set_cache_extract_vbo(render_params, (x, y, w, h), |vertices: &[f32], vertices_n| {
+    //         let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
 
-            unsafe {
-                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-                // replace data of the vbo by the given data
-                gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
-                gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            }
+    //         unsafe {
+    //             gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+    //             // replace data of the vbo by the given data
+    //             gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
+    //             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    //         }
 
-            vert_n = vertices_n as GLsizei;
-        });
+    //         vert_n = vertices_n as GLsizei;
+    //     });
         
-        unsafe {
-            // TODO optimize and only make this call once across all draws?
-            gl::BindVertexArray(self.vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
-            gl::BindVertexArray(0);
-        }
-    }
+    //     unsafe {
+    //         // TODO optimize and only make this call once across all draws?
+    //         gl::BindVertexArray(self.vao);
+    //         gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
+    //         gl::BindVertexArray(0);
+    //     }
+    // }
 
-    fn draw_shape<S: Shader>(&self, shader: &mut S, shape: &Shape, render_params: &S::R) {
-        shader.apply_shape_uniforms(render_params, shape);
+    fn draw_shape<S: Shader>(&self, shader: &mut S, shape: &Shape, render_params: &RenderParams<S::R>) {
+        shader.apply_draw_uniforms(render_params, shape.into());
         let mut vert_n: GLsizei = 0;
-        shader.set_shape_vbo(render_params, shape, |vertices: &[f32], vertices_n| {
+        shader.set_draw_vbo(render_params, shape.into(), |vertices: &[f32], vertices_n| {
             let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
 
             unsafe {
@@ -388,10 +321,10 @@ impl Canvas {
         }
     }
 
-    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, render_params: &S::R) -> Result<(), SprowlError> {
+    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, font_color: Option<Color<u8>>, render_params: &RenderParams<S::R>) -> Result<(), SprowlError> {
         let (rgba8_image, width, height) = {
             let font_renderer = match self.fonts.get(&font_id) {
-                None => return Err(SprowlError::MissingTextureID(font_id)),
+                None => return Err(SprowlError::MissingTextureId(font_id)),
                 Some(font) => font
             };
             let pixel_height = font_size.ceil() as usize;
@@ -440,16 +373,16 @@ impl Canvas {
     }
 
     fn draw_graphic_element<T: AsRef<str>, S: Shader>(&mut self, shader: &mut S, graphic_el: &GraphicElement<T, S::R>) -> Result<(), SprowlError> {
-        match &graphic_el.graphic_entity {
-            GraphicEntity::Texture {id} => {
-                let texture = self.textures.get(&id).ok_or(SprowlError::MissingTextureID(*id))?;
+        match &graphic_el.render_stem {
+            RenderStem::Texture {id} => {
+                let texture = self.textures.get(&id).ok_or(SprowlError::MissingTextureId(*id))?;
 
                 self.draw_texture(shader, &texture, &graphic_el.render_params);
             },
-            GraphicEntity::Shape {shape} => {
+            RenderStem::Shape {shape} => {
                 self.draw_shape(shader, &shape, &graphic_el.render_params);
             },
-            GraphicEntity::Text {font_id, font_size, text, color} => {
+            RenderStem::Text {font_id, font_size, text, color} => {
                 self.draw_text(
                     shader,
                     *font_id,

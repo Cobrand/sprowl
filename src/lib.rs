@@ -14,13 +14,12 @@
 //!
 //! Checkout sdl2-simple example for a more basic example.
 
-#[macro_use]
-extern crate failure;
-
-mod color;
 mod texture;
 mod canvas;
 mod error;
+pub mod color;
+pub mod render;
+mod gelem;
 
 mod font_renderer;
 
@@ -33,6 +32,5 @@ pub mod shaders;
 pub use cgmath;
 pub use image;
 
-pub use self::color::*;
 pub use self::canvas::*;
 pub use self::error::{SprowlError as Error};

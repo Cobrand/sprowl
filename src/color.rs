@@ -1,3 +1,4 @@
+/// `u8` or `f32`, represents the max and min values for a valid color representation.
 pub trait ColorType: ::std::fmt::Debug + Clone + Copy {
     const COLOR_MAX_VALUE: Self;
     const COLOR_MIN_VALUE: Self;
