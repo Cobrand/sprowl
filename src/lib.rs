@@ -17,6 +17,9 @@
 mod texture;
 mod canvas;
 mod error;
+
+mod font_cache;
+
 pub mod color;
 pub mod render;
 mod gelem;

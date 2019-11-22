@@ -12,12 +12,26 @@ fn vanilla(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Ca
     let font_id = canvas.add_font_from_bytes(include_bytes!("/usr/share/fonts/TTF/DejaVuSansMono.ttf"));
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let mut entity_x: i32 = 0;
-    let mut entity_y: i32 = 0;
+    let mut entity_x: i32 = 500;
+    let mut entity_y: i32 = 500;
+
+    static S_1: &str = "AZERTYUIOP^$QSDFGHJKLM%µWXCVBN";
+    // static s2: &str = "azertyuiop$qsdfghjklmù*wxcvbn";
+    static S_2: &str = "Pote is SO kek";
+    // static s3: &str = ",;:!0123456789\"'#$%&()[]{}*+-/\\";
+    static S_3: &str = "O";
+    static S_4: &str = "Well     spaced      text";
 
     let mut shader = VanillaShader::new().unwrap();
 
     'running: for t in 0.. {
+        let x = match (t / 120) % 4 {
+            0 => S_1,
+            1 => S_2,
+            2 => S_3,
+            _ => S_4
+        };
+
         let t0 = ::std::time::Instant::now();
         for event in event_pump.poll_iter() {
             match event {
@@ -57,10 +71,10 @@ fn vanilla(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Ca
                 }
             },
             GraphicElement {
-                render_stem: RenderStem::Text { font_id, text: "Pote", font_size: 32.0, max_width: None },
+                render_stem: RenderStem::Text { font_id, text: x, font_size: 32.0, max_width: None },
                 render_params: RenderParams {
                     custom: Default::default(),
-                    common: CommonRenderParams::new(DrawPos { origin: Origin::TopLeft(0, 0), x: 10, y: 10 }),
+                    common: CommonRenderParams::new(DrawPos { origin: Origin::TopLeft(0, 0), x: 0, y: 0 }),
                 }
             },
         );
@@ -69,7 +83,7 @@ fn vanilla(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Ca
 
         let _delta_t = ::std::time::Instant::now() - t0;
         // println!("{} fps (theory)", 1_000_000_000 / delta_t.subsec_nanos());
-        ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 60));
+        ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 30));
     }
 }
 

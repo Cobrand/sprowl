@@ -73,11 +73,11 @@ impl Texture2D {
     }
 
     /// unexpected behavior if width and height don't match the bytes
-    pub fn update_greyscale(&mut self, bytes: &[u8], x: i32, y: i32, width: u32, height: u32) {
-        debug_assert!(bytes.len() > width as usize * height as usize);
+    pub fn update(&self, bytes: &[u8], x: i32, y: i32, width: u32, height: u32, format: TextureFormat) {
+        debug_assert!(bytes.len() >= width as usize * height as usize * format.bytes());
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.id);
-            gl::TexSubImage2D(gl::TEXTURE_2D, 0, x, y, width as i32, height as i32, gl::RGBA, gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void);
+            gl::TexSubImage2D(gl::TEXTURE_2D, 0, x, y, width as i32, height as i32, format.to_gl_format(), gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void);
 
             gl::BindTexture(gl::TEXTURE_2D, 0);
         }

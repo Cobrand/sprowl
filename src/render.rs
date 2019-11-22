@@ -34,7 +34,14 @@ pub struct DrawPos {
     pub y: i32,
 }
 
-#[derive(Debug)]
+impl DrawPos {
+    pub fn offset(&mut self, x: i32, y: i32) {
+        self.x += x;
+        self.y += y;
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 /// A set of common render parameters, that every shader should take into account.
 pub struct CommonRenderParams {
     pub draw_pos: DrawPos,
@@ -54,12 +61,15 @@ impl CommonRenderParams {
 }
 
 /// Render Parameters for some shader, containing a common part (position, crop, is_grayscale, ...) and a custom part
-pub struct RenderParams<R> {
+#[derive(Clone)]
+pub struct RenderParams<R: Clone> {
     pub common: CommonRenderParams,
     pub custom: R,
 }
 
-impl<R: Default> RenderParams<R> {
+impl<R: Clone + Copy> Copy for RenderParams<R> {}
+
+impl<R: Default + Clone> RenderParams<R> {
     pub fn new(draw_pos: DrawPos) -> RenderParams<R> {
         RenderParams {
             common: CommonRenderParams::new(draw_pos),
@@ -68,7 +78,7 @@ impl<R: Default> RenderParams<R> {
     }
 }
 
-impl<R: std::fmt::Debug> std::fmt::Debug for RenderParams<R> {
+impl<R: std::fmt::Debug + Clone> std::fmt::Debug for RenderParams<R> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("RenderParams")
             .field("common", &self.common)

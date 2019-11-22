@@ -1,5 +1,4 @@
 use crate::render::{Shape, RenderParams};
-use crate::color::Color;
 
 /// Describes something to be drawn with a given shader.
 ///
@@ -49,12 +48,12 @@ impl<S: AsRef<str> + std::fmt::Debug> std::fmt::Debug for RenderStem<S> {
 ///
 /// The parameters depends on the shader you are using.
 #[must_use]
-pub struct GraphicElement<S: AsRef<str>, R> {
+pub struct GraphicElement<S: AsRef<str>, R: Clone> {
     pub render_stem: RenderStem<S>,
     pub render_params: RenderParams<R>,
 }
 
-impl<S: AsRef<str> + std::fmt::Debug, R: std::fmt::Debug> std::fmt::Debug for GraphicElement<S, R> {
+impl<S: AsRef<str> + std::fmt::Debug, R: std::fmt::Debug + Clone> std::fmt::Debug for GraphicElement<S, R> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("GraphicElement")
             .field("render_stem", &self.render_stem)

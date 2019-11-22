@@ -64,7 +64,7 @@ impl ShaderBuildStep {
 }
 
 pub trait Shader {
-    type R: 'static;
+    type R: 'static + Clone;
     type U: Uniform;
 
     fn apply_draw_uniforms(&mut self, render_params: &RenderParams<Self::R>, source: RenderSource<'_>);

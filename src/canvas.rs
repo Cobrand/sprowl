@@ -1,7 +1,9 @@
 use crate::texture::Texture2D;
 
-use rusttype::{PositionedGlyph, FontCollection, Scale as FontScale};
-use image::{self, RgbaImage, Rgba, Pixel, GenericImageView};
+use rusttype::{FontCollection, Scale as FontScale};
+use image::{self, GenericImageView};
+
+use crate::texture::TextureFormat;
 
 use crate::font_renderer::FontRenderer;
 
@@ -232,14 +234,19 @@ impl Canvas {
         self.draw_bound_texture(shader, texture, render_params)
     }
 
+    #[inline]
     fn draw_bound_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>) {
+        Self::draw_bound_texture_raw(shader, texture, render_params, self.vao, self.vbo)
+    }
+
+    fn draw_bound_texture_raw<S: Shader>(shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>, vao: GLuint, vbo: GLuint) {
         shader.apply_draw_uniforms(render_params, texture.into());
         let mut vert_n: GLsizei = 0;
         shader.set_draw_vbo(render_params, texture.into(), |vertices: &[f32], vertices_n| {
             let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
 
             unsafe {
-                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+                gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
                 // replace data of the vbo by the given data
                 gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
                 gl::BindBuffer(gl::ARRAY_BUFFER, 0);
@@ -250,7 +257,7 @@ impl Canvas {
 
         unsafe {
             // TODO optimize and only make this call once across all draws?
-            gl::BindVertexArray(self.vao);
+            gl::BindVertexArray(vao);
             gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
             gl::BindVertexArray(0);
         }
@@ -311,78 +318,45 @@ impl Canvas {
         }
     }
 
-    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, max_width: Option<u32>, render_params: &RenderParams<S::R>) -> Result<(), SprowlError> {
-        /*let (greyscale_image, width, height) = */{
-            let font_renderer = self.fonts.get_mut(&font_id).ok_or(SprowlError::MissingTextureId(font_id))?;
-            
-            let pixel_height = font_size.ceil() as usize;
-            let scale = FontScale::uniform(font_size);
+    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, _max_width: Option<u32>, render_params: &RenderParams<S::R>) -> Result<(), SprowlError> {
+        let font_renderer = self.fonts.get_mut(&font_id).ok_or(SprowlError::MissingTextureId(font_id))?;
 
-            let glyphs = crate::font_renderer::layout_paragraph(&font_renderer.font, scale, max_width.unwrap_or(u32::max_value()), text);
+        let scale = FontScale::uniform(font_size);
 
-            let c: &mut rusttype::gpu_cache::Cache<'static> = &mut font_renderer.font_cache_data;
-            // for glyph in &glyphs {
-            //     c.queue_glyph(0, glyph.clone());
-            // }
-            // font_renderer.font_cache_data.cache_queued(|rect, data| {
-            //     // font_renderer.texture
-            // });
+        let ascent = font_renderer.font.v_metrics(scale).ascent;
 
-            // cache.cache_queued(|rect, data| {
-            //     cache_tex.main_level().write(
-            //         glium::Rect {
-            //             left: rect.min.x,
-            //             bottom: rect.min.y,
-            //             width: rect.width(),
-            //             height: rect.height(),
-            //         },
-            //         glium::texture::RawImage2d {
-            //             data: Cow::Borrowed(data),
-            //             width: rect.width(),
-            //             height: rect.height(),
-            //             format: glium::texture::ClientFormat::U8,
-            //         },
-            //     );
-            // })?;
+        // let glyphs = crate::font_renderer::layout_paragraph(&font_renderer.font, scale, max_width, text);
+        let glyphs = font_renderer.font.layout(text, scale, rusttype::point(0.0f32, 0.0)).collect::<Vec<_>>();
 
-
-        //     let v_metrics = font_renderer.font.v_metrics(scale);
-
-        //     let offset = ::rusttype::point(0.0, v_metrics.ascent);
-        //     let glyphs: Vec<PositionedGlyph<'_>> = font_renderer.font.layout(text, scale, offset).collect();
-        //     let width = glyphs.iter().rev().map(|g| {
-        //         g.position().x as f32 + g.unpositioned().h_metrics().advance_width
-        //     }).next().unwrap_or(0.0).ceil();
-        //     let mut rgba8_image = RgbaImage::new(width as u32, pixel_height as u32);
-        //     for glyph in glyphs {
-        //         if let Some(bb) = glyph.pixel_bounding_box() {
-        //             // TODO: instead of drawing every frame, use gpu_cache from rusttype.
-        //             glyph.draw(|x, y, v| {
-        //                 let x = x as i32 + bb.min.x;
-        //                 let y = y as i32 + bb.min.y;
-
-        //                 // some fonts somehow have a value more than 1 sometimes...
-        //                 // so we have to ceil at 1.0
-        //                 let alpha = if v >= 1.0 {
-        //                     255
-        //                 } else if v > 0.0 {
-        //                     (v * 255.0).round() as u8
-        //                 } else {
-        //                     0
-        //                 };
-        //                 if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
-        //                     let x = x as u32;
-        //                     let y = y as u32;
-        //                     rgba8_image.put_pixel(x, y, Rgba::from_channels(font_color.r, font_color.g, font_color.b, alpha));
-        //                 }
-        //             })
-        //         }
-        //     };
-        //     (rgba8_image, width, pixel_height)
-        };
-        // // let texture = Texture2D::from_bytes(&*rgba8_image, (width as u32, height as u32));
-        // texture.bind();
-        // self.draw_bound_texture(shader, &texture, render_params);
+        let tex = &mut font_renderer.tex;
+        let r = font_renderer.font_cache.cache_glyphs(glyphs.iter(), |rect, data| {
+            let rusttype::Point { x, y } = rect.min;
+            let width = rect.width();
+            let height = rect.height();
+            tex.update(data, x as i32, y as i32, width, height, TextureFormat::Greyscale);
+        });
+        r.expect("failed to write to font gpu cache");
+        
+        let mut r = render_params.clone();
+        r.common.is_source_grayscale = true;
+        
+        let (tex_w, tex_h) = tex.size();
+        let (tex_w, tex_h) = (tex_w as f32, tex_h as f32);
+        font_renderer.tex.bind();
+        for glyph in &glyphs {
+            if let Ok(Some((uv_rect, screen_rect))) = font_renderer.font_cache.rect_for(glyph) {
+                let mut r = render_params.clone();
+                r.common.is_source_grayscale = true;
+                r.common.crop = Some((
+                    (uv_rect.min.x * tex_w) as i32,
+                    (uv_rect.min.y * tex_h) as i32,
+                    (uv_rect.width() * tex_w) as u32,
+                    (uv_rect.height() * tex_h) as u32
+                ));
+                r.common.draw_pos.offset(screen_rect.min.x, screen_rect.min.y + ascent as i32);
+                Self::draw_bound_texture_raw(shader, &font_renderer.tex, &r, self.vao, self.vbo);
+            }
+        }
         Ok(())
     }
 
