@@ -8,7 +8,7 @@ edition = "2018"
 [dependencies]
 image = { version = "^0.22", default-features = false, features = ["png_codec", "bmp"]}
 gl = "^0.14"
-cgmath = "^0.17"
+cgmath = { git = "https://github.com/brendanzab/cgmath.git" } # until 0.18 is released
 rusttype = "^0.8"
 hashbrown = "^0.6"
 
