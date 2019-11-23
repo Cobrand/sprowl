@@ -43,20 +43,27 @@ impl Texture2D {
         }
     }
 
+
     /// the bytes SHOULD be RGBA format. For now.
     ///
+    /// bytes = None will create a texture filled with 0s
+    ///
     /// unexpected behavior if width and height don't match
-    pub (crate) fn from_bytes(bytes: &[u8], dims: (u32, u32), ) -> Texture2D {
+    pub (crate) fn new(bytes: Option<&[u8]>, dims: (u32, u32), ) -> Texture2D {
         Self::from_bytes_with_format(bytes, dims, TextureFormat::RGBA)
     }
 
-    pub (crate) fn from_bytes_with_format(bytes: &[u8], dims: (u32, u32), format: TextureFormat) -> Texture2D {
-        debug_assert!(bytes.len() >= dims.0 as usize * dims.1 as usize * format.bytes());
+    pub (crate) fn from_bytes_with_format(bytes: Option<&[u8]>, dims: (u32, u32), format: TextureFormat) -> Texture2D {
         let (width, height) = (dims.0 as GLuint, dims.1 as GLuint);
         let texture_id = Self::gen_texture();
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, texture_id);
-            gl::TexImage2D(gl::TEXTURE_2D, 0, format.to_gl_format() as i32, width as i32, height as i32, 0, format.to_gl_format(), gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void);
+            if let Some(bytes) = bytes {
+                debug_assert!(bytes.len() >= dims.0 as usize * dims.1 as usize * format.bytes());
+                gl::TexImage2D(gl::TEXTURE_2D, 0, format.to_gl_format() as i32, width as i32, height as i32, 0, format.to_gl_format(), gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void);
+            } else {
+                gl::TexImage2D(gl::TEXTURE_2D, 0, format.to_gl_format() as i32, width as i32, height as i32, 0, format.to_gl_format(), gl::UNSIGNED_BYTE, std::ptr::null());
+            }
 
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);

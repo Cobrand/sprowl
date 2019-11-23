@@ -121,7 +121,7 @@ impl Canvas {
     /// * (debug only) if the size is incorrect (higher than the slice's)
     /// * (debug only) if the amount of textures  recorded is higher than u32::MAX_VALUE
     pub fn add_texture_from_raw_bytes(&mut self, bytes: &[u8], size: (u32, u32)) -> u32 {
-        let texture = Texture2D::from_bytes(bytes, size);
+        let texture = Texture2D::new(Some(bytes), size);
         let _v = self.textures.insert(self.current_texture_id, texture);
         debug_assert_eq!(_v, None);
         let texture_id = self.current_texture_id;

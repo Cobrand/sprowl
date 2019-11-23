@@ -12,14 +12,13 @@ pub struct FontRenderer {
 impl FontRenderer {
     pub fn new(font: Font<'static>) -> FontRenderer {
         const CACHE_WIDTH: usize = 1024;
-        let transparent_bytes = vec!(0u8; CACHE_WIDTH * CACHE_WIDTH);
         FontRenderer {
             font_cache: FontCache::builder()
                 .dimensions(CACHE_WIDTH as u32, CACHE_WIDTH as u32)
                 .pad_glyphs(false)
                 .align_4x4(true)
                 .build(),
-            tex: Texture2D::from_bytes_with_format(&transparent_bytes, (CACHE_WIDTH as u32, CACHE_WIDTH as u32), TextureFormat::Greyscale),
+            tex: Texture2D::from_bytes_with_format(None, (CACHE_WIDTH as u32, CACHE_WIDTH as u32), TextureFormat::Greyscale),
             font,
         }
     }
