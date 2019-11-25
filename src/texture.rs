@@ -44,7 +44,7 @@ impl Texture2D {
     }
 
 
-    /// the bytes SHOULD be RGBA format. For now.
+    /// the bytes SHOULD be RGBA format.
     ///
     /// bytes = None will create a texture filled with 0s
     ///
@@ -94,7 +94,7 @@ impl Texture2D {
         (self.width, self.height)
     }
 
-    pub(crate) fn bind(&self) {
+    pub (crate) fn bind(&self) {
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0);
         }

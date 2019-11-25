@@ -14,26 +14,27 @@
 //!
 //! Checkout sdl2-simple example for a more basic example.
 
-mod texture;
-mod canvas;
+pub mod utils;
+pub mod texture;
+// mod canvas;
 mod error;
 
+mod font_renderer;
 mod font_cache;
 
 pub mod color;
 pub mod render;
 mod gelem;
 
-mod font_renderer;
-
 /// Everything to use shaders and build your own.
 pub mod shader;
 
-/// A collection of shader samples. Everything from the simplest shader to more complex ones.
-pub mod shaders;
+// /// A collection of shader samples. Everything from the simplest shader to more complex ones.
+// pub mod shaders;
 
+pub use smallvec;
 pub use cgmath;
 pub use image;
 
-pub use self::canvas::*;
+// pub use self::canvas::*;
 pub use self::error::{SprowlError as Error};

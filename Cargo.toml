@@ -11,7 +11,7 @@ gl = "^0.14"
 cgmath = { git = "https://github.com/brendanzab/cgmath.git" } # until 0.18 is released
 rusttype = "^0.8"
 hashbrown = "^0.6"
-
+smallvec = "^1"
 linked-hash-map = "^0.5"
 
 [dev-dependencies]

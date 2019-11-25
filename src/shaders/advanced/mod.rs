@@ -24,7 +24,8 @@ pub struct AdvancedShader {
 }
 
 impl AdvancedShader {
-    fn apply_common_uniforms(&mut self, render_params: &RenderParams<<Self as Shader>::R>, (width, height): (u32, u32)) {
+    type D = RenderParams<<Self as Shader>::R>;
+    fn apply_common_uniforms(&mut self, render_params: &D, (width, height): (u32, u32)) {
         use AdvancedUniformName as UniName;
 
         let scale = render_params.custom.scale.unwrap_or(1.0);

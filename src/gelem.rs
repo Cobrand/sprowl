@@ -1,4 +1,5 @@
-use crate::render::{Shape, RenderParams};
+use crate::render::RenderParams;
+use crate::utils::Shape;
 
 /// Describes something to be drawn with a given shader.
 ///
@@ -18,8 +19,6 @@ pub enum RenderStem<S: AsRef<str>> {
         font_size: f32,
         /// The text that should be printed
         text: S,
-        /// The max width before the text starts wrapping to the next line.
-        max_width: Option<u32>,
     }
 }
 
@@ -32,12 +31,11 @@ impl<S: AsRef<str> + std::fmt::Debug> std::fmt::Debug for RenderStem<S> {
             RenderStem::Shape { shape } => {
                 fmt.debug_struct("GraphicEntity::Shape").field("shape", shape).finish()
             },
-            RenderStem::Text { font_id, font_size, text, max_width } => {
+            RenderStem::Text { font_id, font_size, text } => {
                 fmt.debug_struct("GraphicEntity::Text")
                     .field("font_id", font_id)
                     .field("font_size", font_size)
                     .field("text", text)
-                    .field("max_width", max_width)
                     .finish()
             }
         }

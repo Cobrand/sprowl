@@ -215,7 +215,7 @@ impl Canvas {
     /// buffer and test method with the z-axis of opengl, because the depth buffer works extremely
     /// poorly with transparency. At the cost of sorting yourself all the textures you want,
     /// you are able to have transparent textures.
-    pub fn draw<'a, T: AsRef<str> + 'a, S: Shader, I: IntoIterator<Item=&'a GraphicElement<T, S::R>>>(&mut self, shader: &mut S, graphic_elements: I) -> SprowlErrors {
+    pub fn draw<'a, T: AsRef<str> + 'a, S: Shader, I: IntoIterator<Item=&'a GraphicElement<T, S::RenderParams>>>(&mut self, shader: &mut S, graphic_elements: I) -> SprowlErrors {
         let mut errors = vec!();
         
         shader.as_base_shader().use_program();

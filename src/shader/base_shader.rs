@@ -1,47 +1,24 @@
-use gl;
-use gl::types::*;
-use std::os::raw::*;
-use hashbrown::HashMap;
-
-use crate::render::{RenderParams, RenderSource};
-
+use gl::{self, types::*};
 use cgmath::{Matrix4, Vector2, Vector3, Vector4};
+use hashbrown::HashMap;
+use std::{
+    ffi::{CStr, CString},
+    mem::MaybeUninit,
+    ptr,
+    os::raw::*,
+};
 
-use std::ffi::{CStr, CString};
-use std::mem::MaybeUninit;
-use std::ptr;
 
 
-pub trait Uniform: AsRef<str> + ::std::fmt::Debug + Clone + Copy + ::std::hash::Hash + PartialEq + Eq {
+/// Trait defining a uniform, typically an enum.
+pub trait Uniform: std::fmt::Debug + Clone + Copy + std::hash::Hash + PartialEq + Eq {
+    fn name(&self) -> &str;
 }
 
-#[derive(Debug)]
-pub struct ShaderLoadError {
-    err_type: &'static str,
-    error_message: String,
+pub struct BaseShader<U: Uniform> {
+    id: GLuint,
+    uniforms: HashMap<U, GLint>,
 }
-
-impl ::std::error::Error for ShaderLoadError {
-    fn description(&self) -> &str {
-        "error while loading shader"
-    }
-}
-
-impl ShaderLoadError {
-    fn new(err_type: &'static str, error_message: String) -> ShaderLoadError {
-        ShaderLoadError {
-            err_type,
-            error_message
-        }
-    } 
-}
-
-impl ::std::fmt::Display for ShaderLoadError {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        write!(f, "error of type {} while loading shader: {}", self.err_type, self.error_message)
-    }
-}
-
 
 #[derive(Clone, Copy, Debug)]
 enum ShaderBuildStep {
@@ -63,41 +40,10 @@ impl ShaderBuildStep {
     }
 }
 
-pub trait Shader {
-    type R: 'static + Clone;
-    type U: Uniform;
-
-    fn apply_draw_uniforms(&mut self, render_params: &RenderParams<Self::R>, source: RenderSource<'_>);
-
-    /// Apply uniforms for the current frame
-    fn apply_global_uniforms(&mut self, window_size: (u32, u32));
-
-    /// Set the VBO for a draw texture operation
-    fn set_draw_vbo<F>(&mut self, _render_params: &RenderParams<Self::R>, _source: RenderSource<'_>, f: F) where F: FnOnce(&[f32], usize) {
-        static DEFAULT_VERTICES: [f32; 24] =
-            [0.0, 1.0, 0.0, 1.0, // 0
-            1.0, 0.0, 1.0, 0.0, // 1
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 1.0,
-            1.0, 1.0, 1.0, 1.0,
-            1.0, 0.0, 1.0, 0.0];
-        f(&DEFAULT_VERTICES, 6);
-    }
-
-    fn as_base_shader(&mut self) -> &mut BaseShader<Self::U>;
-
-    fn init_all_uniform_locations(&mut self);
-}
-
-pub struct BaseShader<U: Uniform> {
-    id: GLuint,
-    uniforms: HashMap<U, GLint>,
-}
-
 impl<U: Uniform> BaseShader<U> {
 
     pub fn init_uniform_location(&mut self, uniform: U) {
-        let name = CString::new(uniform.as_ref()).unwrap();
+        let name = CString::new(uniform.name()).unwrap();
         let uniform_location = unsafe {gl::GetUniformLocation(self.id, name.as_ptr())};
         if uniform_location < 0 {
             panic!("Error / Invalid location for {:?}: gl returned {}", uniform, uniform_location);
@@ -224,5 +170,29 @@ impl<U: Uniform> BaseShader<U> {
 
     pub fn use_program(&mut self) {
         unsafe { gl::UseProgram(self.id); }
+    }
+}
+
+#[derive(Debug)]
+pub struct ShaderLoadError {
+    err_type: &'static str,
+    error_message: String,
+}
+
+impl ::std::error::Error for ShaderLoadError {
+}
+
+impl ShaderLoadError {
+    fn new(err_type: &'static str, error_message: String) -> ShaderLoadError {
+        ShaderLoadError {
+            err_type,
+            error_message
+        }
+    } 
+}
+
+impl ::std::fmt::Display for ShaderLoadError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        write!(f, "error of type {} while loading shader: {}", self.err_type, self.error_message)
     }
 }
