@@ -16,8 +16,9 @@
 
 pub mod utils;
 pub mod texture;
-// mod canvas;
+mod canvas;
 mod error;
+pub mod helpers;
 
 mod font_renderer;
 mod font_cache;
@@ -32,6 +33,7 @@ pub mod shader;
 // /// A collection of shader samples. Everything from the simplest shader to more complex ones.
 // pub mod shaders;
 
+pub use rusttype;
 pub use smallvec;
 pub use cgmath;
 pub use image;

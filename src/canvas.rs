@@ -1,18 +1,18 @@
 use crate::texture::Texture2D;
+use smallvec::SmallVec;
 
-use rusttype::{FontCollection, Scale as FontScale};
+use rusttype::FontCollection;
 use image::{self, GenericImageView};
-
-use crate::texture::TextureFormat;
 
 use crate::font_renderer::FontRenderer;
 
+use crate::shader::RenderSource;
 use std::path::Path;
 use hashbrown::HashMap;
+use crate::shader::ShaderDrawCall;
 use crate::color::*;
 use crate::error::{SprowlError};
 use crate::shader::Shader;
-use crate::render::{RenderParams, Shape};
 use crate::gelem::*;
 use gl;
 use gl::types::*;
@@ -85,8 +85,8 @@ impl Canvas {
 
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 
-            // fill a VBO with the vertices, but allocate up to 4096 times the vertices.
-            gl::BufferData(gl::ARRAY_BUFFER, size_of::<Vertices24>() as isize * 4096, &vertices as *const _ as *const c_void, gl::DYNAMIC_DRAW);
+            // fill a VBO with the vertices, but allocate up to 1024 times the vertices.
+            gl::BufferData(gl::ARRAY_BUFFER, size_of::<Vertices24>() as isize * 1024, &vertices as *const _ as *const c_void, gl::DYNAMIC_DRAW);
             gl::BindVertexArray(vao);
 
             // enable attribute 0 & 1
@@ -112,6 +112,26 @@ impl Canvas {
             canvas.inner_init();
             canvas
         }
+    }
+
+    #[inline]
+    pub fn get_font(&self, id: u32) -> Option<&FontRenderer> {
+        self.fonts.get(&id)
+    }
+
+    #[inline]
+    pub fn get_font_mut(&mut self, id: u32) -> Option<&mut FontRenderer> {
+        self.fonts.get_mut(&id)
+    }
+
+    #[inline]
+    pub fn get_texture(&self, id: u32) -> Option<&Texture2D> {
+        self.textures.get(&id)
+    }
+
+    #[inline]
+    pub fn get_texture_mut(&mut self, id: u32) -> Option<&mut Texture2D> {
+        self.textures.get_mut(&id)
     }
 
     /// Load a texture from bytes: you must specify the correct width and height of the texture.
@@ -215,53 +235,98 @@ impl Canvas {
     /// buffer and test method with the z-axis of opengl, because the depth buffer works extremely
     /// poorly with transparency. At the cost of sorting yourself all the textures you want,
     /// you are able to have transparent textures.
-    pub fn draw<'a, T: AsRef<str> + 'a, S: Shader, I: IntoIterator<Item=&'a GraphicElement<T, S::RenderParams>>>(&mut self, shader: &mut S, graphic_elements: I) -> SprowlErrors {
+    pub fn draw<'a, T: AsRef<str> + 'a, S: Shader, I>(&mut self, shader: &mut S, graphic_elements: I) -> SprowlErrors
+    where I: IntoIterator<Item=&'a GraphicElement<T, <S::D as ShaderDrawCall>::RenderParams>> {
         let mut errors = vec!();
         
         shader.as_base_shader().use_program();
         shader.apply_global_uniforms(self.size());
 
         for graphic_el in graphic_elements {
-            if let Err(error) = self.draw_graphic_element(shader, graphic_el) {
-                errors.push(error);
-            };
+            match self.gelem_as_draw_call::<T, S::D>(graphic_el) {
+                Err(error) => {
+                    errors.push(error);
+                },
+                Ok(draw_calls) => {
+                    for draw_call in draw_calls {
+                        self.draw_elem(shader, draw_call);
+                    }
+                }
+            }
+        }
+        if ! errors.is_empty() {
+            log::warn!("drawing routine had {} errors", errors.len());
         }
         errors
     }
 
-    fn draw_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>) {
-        texture.bind();
-        self.draw_bound_texture(shader, texture, render_params)
+    fn gelem_as_draw_call<T: AsRef<str>, D: ShaderDrawCall>(
+        &mut self,
+        graphic_el: &GraphicElement<T, <D as ShaderDrawCall>::RenderParams>
+    ) -> Result<SmallVec<[D; 2]>, SprowlError> {
+        D::from_graphic_elem(graphic_el, self)
     }
 
-    #[inline]
-    fn draw_bound_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>) {
-        Self::draw_bound_texture_raw(shader, texture, render_params, self.vao, self.vbo)
-    }
+    fn draw_elem<S: Shader>(&mut self, shader: &mut S, draw_call: S::D) {
+        if let RenderSource::Texture(texture) = draw_call.render_source() {
+            texture.bind();
+        }
 
-    fn draw_bound_texture_raw<S: Shader>(shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>, vao: GLuint, vbo: GLuint) {
-        shader.apply_draw_uniforms(render_params, texture.into());
-        let mut vert_n: GLsizei = 0;
-        shader.set_draw_vbo(render_params, texture.into(), |vertices: &[f32], vertices_n| {
-            let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
+        let vertices = draw_call.render_source().compute_draw_vbo(draw_call.common_params().crop);
+        shader.apply_draw_uniforms(draw_call);
 
-            unsafe {
-                gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-                // replace data of the vbo by the given data
-                gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
-                gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            }
+        let vert_n: GLsizei = 6;
 
-            vert_n = vertices_n as GLsizei;
-        });
+        let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
+
+        unsafe {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+            // replace data of the vbo by the given data
+            gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, &vertices as *const _ as *const c_void);
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        }
 
         unsafe {
             // TODO optimize and only make this call once across all draws?
-            gl::BindVertexArray(vao);
+            gl::BindVertexArray(self.vao);
             gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
             gl::BindVertexArray(0);
         }
     }
+
+    // fn draw_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>) {
+    //     texture.bind();
+    //     self.draw_bound_texture(shader, texture, render_params)
+    // }
+
+    // #[inline]
+    // fn draw_bound_texture<S: Shader>(&self, shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>) {
+    //     Self::draw_bound_texture_raw(shader, texture, render_params, self.vao, self.vbo)
+    // }
+
+    // fn draw_bound_texture_raw<S: Shader>(shader: &mut S, texture: &Texture2D, render_params: &RenderParams<S::R>, vao: GLuint, vbo: GLuint) {
+    //     shader.apply_draw_uniforms(render_params, texture.into());
+    //     let mut vert_n: GLsizei = 0;
+    //     shader.set_draw_vbo(render_params, texture.into(), |vertices: &[f32], vertices_n| {
+    //         let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
+
+    //         unsafe {
+    //             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+    //             // replace data of the vbo by the given data
+    //             gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
+    //             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    //         }
+
+    //         vert_n = vertices_n as GLsizei;
+    //     });
+
+    //     unsafe {
+    //         // TODO optimize and only make this call once across all draws?
+    //         gl::BindVertexArray(vao);
+    //         gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
+    //         gl::BindVertexArray(0);
+    //     }
+    // }
 
     // fn draw_cache_chunk<S: Shader>(&self, shader: &mut S, texture: &Texture2D, (x, y, w, h): (i32, i32, u32, u32), render_params: &S::R) {
     //     shader.apply_draw_uniforms(render_params, texture);
@@ -294,95 +359,98 @@ impl Canvas {
     //     }
     // }
 
-    fn draw_shape<S: Shader>(&self, shader: &mut S, shape: &Shape, render_params: &RenderParams<S::R>) {
-        shader.apply_draw_uniforms(render_params, shape.into());
-        let mut vert_n: GLsizei = 0;
-        shader.set_draw_vbo(render_params, shape.into(), |vertices: &[f32], vertices_n| {
-            let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
+    // fn draw_shape<S: Shader>(&self, shader: &mut S, shape: &Shape, render_params: &RenderParams<S::R>) {
+    //     shader.apply_draw_uniforms(render_params, shape.into());
+    //     let mut vert_n: GLsizei = 0;
+    //     shader.set_draw_vbo(render_params, shape.into(), |vertices: &[f32], vertices_n| {
+    //         let vertices_size = (size_of::<f32>() * vertices.len()) as isize;
 
-            unsafe {
-                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-                // replace data of the vbo by the given data
-                gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
-                gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            }
+    //         unsafe {
+    //             gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+    //             // replace data of the vbo by the given data
+    //             gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertices_size, vertices as *const _ as *const c_void);
+    //             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    //         }
 
-            vert_n = vertices_n as GLsizei;
-        });
+    //         vert_n = vertices_n as GLsizei;
+    //     });
 
-        unsafe {
-            // TODO optimize and only make this call once across all draws?
-            gl::BindVertexArray(self.vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
-            gl::BindVertexArray(0);
-        }
-    }
+    //     unsafe {
+    //         // TODO optimize and only make this call once across all draws?
+    //         gl::BindVertexArray(self.vao);
+    //         gl::DrawArrays(gl::TRIANGLES, 0, vert_n);
+    //         gl::BindVertexArray(0);
+    //     }
+    // }
 
-    fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, _max_width: Option<u32>, render_params: &RenderParams<S::R>) -> Result<(), SprowlError> {
-        let font_renderer = self.fonts.get_mut(&font_id).ok_or(SprowlError::MissingTextureId(font_id))?;
+    // fn draw_text<S: Shader>(&mut self, shader: &mut S, font_id: u32, font_size: f32, text: &str, _max_width: Option<u32>, render_params: &RenderParams<S::R>) -> Result<(), SprowlError> {
+    //     let font_renderer = self.fonts.get_mut(&font_id).ok_or(SprowlError::MissingTextureId(font_id))?;
 
-        let scale = FontScale::uniform(font_size);
+    //     let scale = FontScale::uniform(font_size);
 
-        let ascent = font_renderer.font.v_metrics(scale).ascent;
+    //     let ascent = font_renderer.font.v_metrics(scale).ascent;
 
-        // let glyphs = crate::font_renderer::layout_paragraph(&font_renderer.font, scale, max_width, text);
-        let glyphs = font_renderer.font.layout(text, scale, rusttype::point(0.0f32, 0.0)).collect::<Vec<_>>();
+    //     // let glyphs = crate::font_renderer::layout_paragraph(&font_renderer.font, scale, max_width, text);
+    //     let glyphs = font_renderer.font.layout(text, scale, rusttype::point(0.0f32, 0.0)).collect::<Vec<_>>();
 
-        let tex = &mut font_renderer.tex;
-        let r = font_renderer.font_cache.cache_glyphs(glyphs.iter(), |rect, data| {
-            let rusttype::Point { x, y } = rect.min;
-            let width = rect.width();
-            let height = rect.height();
-            tex.update(data, x as i32, y as i32, width, height, TextureFormat::Greyscale);
-        });
-        r.expect("failed to write to font gpu cache");
+    //     let tex = &mut font_renderer.tex;
+    //     let r = font_renderer.font_cache.cache_glyphs(glyphs.iter(), |rect, data| {
+    //         let rusttype::Point { x, y } = rect.min;
+    //         let width = rect.width();
+    //         let height = rect.height();
+    //         tex.update(data, x as i32, y as i32, width, height, TextureFormat::Greyscale);
+    //     });
+    //     r.expect("failed to write to font gpu cache");
         
-        let mut r = render_params.clone();
-        r.common.is_source_grayscale = true;
+    //     let mut r = render_params.clone();
+    //     r.common.is_source_grayscale = true;
         
-        let (tex_w, tex_h) = tex.size();
-        let (tex_w, tex_h) = (tex_w as f32, tex_h as f32);
-        font_renderer.tex.bind();
-        for glyph in &glyphs {
-            if let Ok(Some((uv_rect, screen_rect))) = font_renderer.font_cache.rect_for(glyph) {
-                let mut r = render_params.clone();
-                r.common.is_source_grayscale = true;
-                r.common.crop = Some((
-                    (uv_rect.min.x * tex_w) as i32,
-                    (uv_rect.min.y * tex_h) as i32,
-                    (uv_rect.width() * tex_w) as u32,
-                    (uv_rect.height() * tex_h) as u32
-                ));
-                r.common.draw_pos.offset(screen_rect.min.x, screen_rect.min.y + ascent as i32);
-                Self::draw_bound_texture_raw(shader, &font_renderer.tex, &r, self.vao, self.vbo);
-            }
-        }
-        Ok(())
-    }
+    //     let (tex_w, tex_h) = tex.size();
+    //     let (tex_w, tex_h) = (tex_w as f32, tex_h as f32);
+    //     font_renderer.tex.bind();
+    //     for glyph in &glyphs {
+    //         if let Ok(Some((uv_rect, screen_rect))) = font_renderer.font_cache.rect_for(glyph) {
+    //             let mut r = render_params.clone();
+    //             r.common.is_source_grayscale = true;
+    //             r.common.crop = Some((
+    //                 (uv_rect.min.x * tex_w) as i32,
+    //                 (uv_rect.min.y * tex_h) as i32,
+    //                 (uv_rect.width() * tex_w) as u32,
+    //                 (uv_rect.height() * tex_h) as u32
+    //             ));
+    //             r.common.draw_pos.offset(screen_rect.min.x, screen_rect.min.y + ascent as i32);
+    //             Self::draw_bound_texture_raw(shader, &font_renderer.tex, &r, self.vao, self.vbo);
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
-    fn draw_graphic_element<T: AsRef<str>, S: Shader>(&mut self, shader: &mut S, graphic_el: &GraphicElement<T, S::R>) -> Result<(), SprowlError> {
-        match &graphic_el.render_stem {
-            RenderStem::Texture {id} => {
-                let texture = self.textures.get(&id).ok_or(SprowlError::MissingTextureId(*id))?;
+    // fn draw_elem<T: AsRef<str>, S: Shader>(
+    //     &mut self,
+    //     graphic_el: &graphicelement<t, <s::d as fromgraphicelem>::renderparams>
+    // ) -> Result<impl Iterator<Item=S::D>, SprowlError> {
+    //     match &graphic_el.render_stem {
+    //         RenderStem::Texture {id} => {
+    //             let texture = self.textures.get(&id).ok_or(SprowlError::MissingTextureId(*id))?;
 
-                self.draw_texture(shader, &texture, &graphic_el.render_params);
-            },
-            RenderStem::Shape {shape} => {
-                self.draw_shape(shader, &shape, &graphic_el.render_params);
-            },
-            RenderStem::Text {font_id, font_size, text, max_width} => {
-                self.draw_text(
-                    shader,
-                    *font_id,
-                    *font_size,
-                    text.as_ref(),
-                    *max_width,
-                    &graphic_el.render_params
-                )?;
-            }
-        };
-        Ok(())
-    }
+    //             self.draw_texture(shader, &texture, &graphic_el.render_params);
+    //         },
+    //         RenderStem::Shape {shape} => {
+    //             self.draw_shape(shader, &shape, &graphic_el.render_params);
+    //         },
+    //         RenderStem::Text {font_id, font_size, text, max_width} => {
+    //             self.draw_text(
+    //                 shader,
+    //                 *font_id,
+    //                 *font_size,
+    //                 text.as_ref(),
+    //                 *max_width,
+    //                 &graphic_el.render_params
+    //             )?;
+    //         }
+    //     };
+    //     Ok(())
+    // }
 }
 
 impl Drop for Canvas {

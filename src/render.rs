@@ -1,5 +1,4 @@
 pub use crate::texture::Texture2D;
-use cgmath::Vector2;
 pub use crate::gelem::*;
 use crate::utils::DrawPos;
 
