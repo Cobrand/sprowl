@@ -1,13 +1,14 @@
-use crate::texture::Texture2D;
+use crate::texture::{Texture2D, Texture2DRef};
 use crate::utils::Shape;
 
 /// Represents something your shader would like to draw. Typically, a texture or a shape.
-pub enum RenderSource<'a> {
-    Texture(&'a Texture2D),
-    Shape(&'a Shape),
+#[derive(Clone, Copy, Debug)]
+pub enum RenderSource {
+    Texture(Texture2DRef),
+    Shape(Shape),
 }
 
-impl<'a> RenderSource<'a> {
+impl RenderSource {
     pub fn size(&self) -> (u32, u32) {
         match self {
             RenderSource::Texture(t) => t.size(),
@@ -44,14 +45,14 @@ impl<'a> RenderSource<'a> {
     }
 }
 
-impl<'a> From<&'a Texture2D> for RenderSource<'a> {
-    fn from(t: &'a Texture2D) -> RenderSource<'a> {
-        RenderSource::Texture(t)
+impl<'a> From<&'a Texture2D> for RenderSource {
+    fn from(t: &'a Texture2D) -> RenderSource {
+        RenderSource::Texture(t.as_ref())
     }
 }
 
-impl<'a> From<&'a Shape> for RenderSource<'a> {
-    fn from(s: &'a Shape) -> RenderSource<'a> {
-        RenderSource::Shape(s)
+impl<'a> From<&'a Shape> for RenderSource {
+    fn from(s: &'a Shape) -> RenderSource {
+        RenderSource::Shape(s.clone())
     }
 }

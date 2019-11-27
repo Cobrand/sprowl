@@ -43,6 +43,7 @@ impl FontRenderer {
     pub fn word_to_draw_call<'a, 'b>(&'a mut self, text: &'b str, font_size: f32, origin: Vector2<i32>) -> Vec<FontStemDrawCall<'a>> {
         let scale = FontScale::uniform(font_size);
 
+        let advance = self.font().v_metrics(scale).ascent.round() as i32;
         let glyphs = self.font.layout(text, scale, rusttype::point(origin.x as f32, origin.y as f32)).enumerate().collect::<Vec<_>>();
 
         let tex = &mut self.tex;
@@ -68,7 +69,7 @@ impl FontRenderer {
                 );
                 results.push(FontStemDrawCall {
                     source_crop,
-                    dest_origin: Vector2::new(screen_rect.min.x, screen_rect.min.y),
+                    dest_origin: Vector2::new(screen_rect.min.x, screen_rect.min.y + advance),
                     texture: &self.tex,
                     character_index: *i,
                 });

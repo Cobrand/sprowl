@@ -43,6 +43,13 @@ impl Texture2D {
         }
     }
 
+    pub (crate) fn as_ref(&self) -> Texture2DRef {
+        Texture2DRef {
+            id: self.id,
+            width: self.width,
+            height: self.height,
+        }
+    }
 
     /// the bytes SHOULD be RGBA format.
     ///
@@ -94,6 +101,7 @@ impl Texture2D {
         (self.width, self.height)
     }
 
+    #[allow(dead_code)]
     pub (crate) fn bind(&self) {
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0);
@@ -115,5 +123,28 @@ impl Drop for Texture2D {
 impl PartialEq for Texture2D {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
+    }
+}
+
+/// A reference to a texture, can be copied and dropped freely without affecting the original texture.
+#[derive(Debug, Copy, Clone)]
+pub struct Texture2DRef {
+    id: GLuint,
+    width: GLuint,
+    height: GLuint,
+}
+
+impl Texture2DRef {
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    pub (crate) fn bind(&self) {
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE0);
+        }
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D, self.id);
+        }
     }
 }

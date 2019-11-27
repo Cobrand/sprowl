@@ -1,4 +1,3 @@
-use crate::render::RenderParams;
 use crate::utils::Shape;
 
 /// Describes something to be drawn with a given shader.
@@ -48,7 +47,7 @@ impl<S: AsRef<str> + std::fmt::Debug> std::fmt::Debug for RenderStem<S> {
 #[must_use]
 pub struct GraphicElement<S: AsRef<str>, R: Clone> {
     pub render_stem: RenderStem<S>,
-    pub render_params: RenderParams<R>,
+    pub render_params: R,
 }
 
 impl<S: AsRef<str> + std::fmt::Debug, R: std::fmt::Debug + Clone> std::fmt::Debug for GraphicElement<S, R> {

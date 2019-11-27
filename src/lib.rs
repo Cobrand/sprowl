@@ -20,12 +20,11 @@ mod canvas;
 mod error;
 pub mod helpers;
 
-mod font_renderer;
+pub mod font_renderer;
 mod font_cache;
 
 pub mod color;
-pub mod render;
-mod gelem;
+pub mod gelem;
 
 /// Everything to use shaders and build your own.
 pub mod shader;
@@ -38,5 +37,5 @@ pub use smallvec;
 pub use cgmath;
 pub use image;
 
-// pub use self::canvas::*;
+pub use self::canvas::*;
 pub use self::error::{SprowlError as Error};

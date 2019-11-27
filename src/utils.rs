@@ -31,6 +31,12 @@ pub struct DrawPos {
     pub origin: Origin,
 }
 
+impl DrawPos {
+    pub fn new<I: Into<Pos>>(pos: I) -> DrawPos {
+        DrawPos { pos: pos.into(), origin: Origin::new() }
+    }
+}
+
 /// Represents a simple shape: rect, circle, triangle, ect. Used when you want to draw without a texture.
 #[derive(Debug, Clone, Copy)]
 pub enum Shape {
