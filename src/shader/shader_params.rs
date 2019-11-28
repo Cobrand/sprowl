@@ -48,6 +48,8 @@ impl Scaling {
 #[derive(Debug)]
 pub struct CommonShaderDrawParams {
     pub crop: Option<(i32, i32, u32, u32)>,
+    /// "garbage" pixels to add on all sides; for shader purposes
+    pub pad: Option<i32>,
     /// angle is degrees
     pub rotate: Option<(f32, Origin)>,
     pub flip: Flip,
@@ -63,6 +65,7 @@ impl CommonShaderDrawParams {
         CommonShaderDrawParams {
             draw_pos,
             crop: Default::default(),
+            pad: Default::default(),
             rotate: Default::default(),
             flip: Default::default(),
             scaling: Default::default(),

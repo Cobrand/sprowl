@@ -64,7 +64,7 @@ void main()
         return;
     }
     float v = get_border_alpha(img, TexCoords, outline_thickness);
-    if (v > 0.1) {
+    if (v > 0.0) {
         color = blend(color, vec4(outline_color.rgb, v));
     }
 }

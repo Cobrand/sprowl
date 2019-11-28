@@ -258,6 +258,7 @@ impl ShaderDrawCall for ExampleDrawCall {
                     let mut common = CommonShaderDrawParams::new(DrawPos::new(character.dest_origin));
                     common.crop = Some(character.source_crop);
                     common.is_source_grayscale = true;
+                    common.pad = Some(1);
                     results.push(ExampleDrawCall {
                         source: RenderSource::from(character.texture),
                         common,

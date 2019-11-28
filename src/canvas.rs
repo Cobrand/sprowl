@@ -272,7 +272,16 @@ impl Canvas {
             texture.bind();
         }
 
-        let vertices = draw_call.render_source().compute_draw_vbo(draw_call.common_params().crop);
+        let pad = draw_call.common_params().pad;
+        let crop = draw_call.common_params().crop.map(|(x, y, w, h)| {
+            // if pad is not None, increase the crop by `pad` pixels.
+            if let Some(pad) = pad {
+                (x - pad, y - pad, w + pad as u32 * 2, h + pad as u32 * 2)
+            } else {
+                (x, y, w, h)
+            }
+        });
+        let vertices = draw_call.render_source().compute_draw_vbo(crop);
         shader.apply_draw_uniforms(draw_call);
 
         let vert_n: GLsizei = 6;
