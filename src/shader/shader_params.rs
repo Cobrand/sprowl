@@ -52,6 +52,8 @@ pub struct CommonShaderDrawParams {
     pub rotate: Option<(f32, Origin)>,
     pub flip: Flip,
     pub scaling: Scaling,
+    /// `is_source_grayscale` is necessary to know if the source texture is GL_RED or not.
+    /// Mostly used by font rendering.
     pub is_source_grayscale: bool,
     pub draw_pos: DrawPos,
 }

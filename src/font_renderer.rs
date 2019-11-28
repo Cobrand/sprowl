@@ -23,7 +23,7 @@ impl FontRenderer {
         FontRenderer {
             font_cache: FontCache::builder()
                 .dimensions(CACHE_WIDTH as u32, CACHE_WIDTH as u32)
-                .pad_glyphs(false)
+                .pad_glyphs(true)
                 .align_4x4(true)
                 .build(),
             tex: Texture2D::from_bytes_with_format(None, (CACHE_WIDTH as u32, CACHE_WIDTH as u32), TextureFormat::Greyscale),

@@ -9,7 +9,7 @@ use sprowl::{
     gelem::{RenderStem, GraphicElement},
     font_renderer::FontStemDrawCall,
     shader::{BaseShader, Shader, ShaderDrawCall, CommonShaderDrawParams, RenderSource, self},
-    utils::{Origin, DrawPos},
+    utils::{Shape, Origin, DrawPos},
 };
 
 static FRAGMENT_SHADER_SOURCE: &'static str = include_str!("advanced_fs.glsl");
@@ -21,8 +21,8 @@ pub enum ExampleUniformName {
     Model,
     OutlineColor,
     OutlineThickness,
-    BackgroundColor,
     Effect,
+    EffectColor,
     IsGrayscale,
     T,
 }
@@ -35,23 +35,45 @@ impl shader::Uniform for ExampleUniformName {
             Model => "model",
             OutlineColor => "outline_color",
             OutlineThickness => "outline_thickness",
+            EffectColor => "effect_color",
             Effect => "effect",
-            BackgroundColor => "background_color",
             IsGrayscale => "is_grayscale",
             T => "t",
         }
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum Effect {
+    None,
+    Glowing(Color<u8>),
+    Solid(Color<u8>),
+}
+
+impl Default for Effect {
+    fn default() -> Effect {
+        Effect::None
+    }
+}
+
+impl Effect {
+    pub fn as_draw_params(&self) -> (u32, Color<u8>) {
+        match *self {
+            Effect::None => (0, Color::from_rgba(0,0,0,0)),
+            Effect::Glowing(c) => (1, c),
+            Effect::Solid(c) => (2, c),
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct ExampleRenderParams {
     pub draw_pos: DrawPos,
+    pub crop: Option<(i32, i32, u32, u32)>,
     pub rotate: Option<(f32, Origin)>,
     pub scale: Option<f32>,
     pub outline: Option<Color<u8>>,
-    pub effect: u32, // stub, glowing effect == 1 for now
-    pub background_color: Option<Color<u8>>,
+    pub effect: Effect,
     pub t: f32,
 }
 
@@ -59,11 +81,11 @@ impl ExampleRenderParams {
     pub fn new(pos: Vector2<i32>, origin: Origin) -> ExampleRenderParams {
         ExampleRenderParams {
             draw_pos: DrawPos { pos, origin },
+            crop: Default::default(),
             rotate: Default::default(),
             scale: Default::default(),
             outline: Default::default(),
-            effect: 0,
-            background_color: Default::default(),
+            effect: Default::default(),
             t: 0.0,
         }
     }
@@ -74,7 +96,7 @@ pub struct ExampleDrawCall {
     pub common: CommonShaderDrawParams,
     pub outline: Option<Color<u8>>,
     pub effect: u32,
-    pub background_color: Option<Color<u8>>,
+    pub effect_color: Color<u8>,
     pub t: f32,
 }
 
@@ -140,7 +162,8 @@ impl Shader for ExampleShader {
             0.0
         )) * model;
 
-        self.shader.set_vector2(UniName::OutlineThickness, &Vector2::from((1.0 / width as f32 / scale_x, 1.0 / height as f32 / scale_y)));
+        let thickness_pixels = 1.0;
+        self.shader.set_vector2(UniName::OutlineThickness, &Vector2::from((thickness_pixels / width as f32 / scale_x, thickness_pixels / height as f32 / scale_y)));
         if let Some(outline_color) = draw_call.outline {
             let color = Vector4::from(outline_color.to_color_f32().rgba());
             self.shader.set_vector4(UniName::OutlineColor, &color);
@@ -148,8 +171,6 @@ impl Shader for ExampleShader {
             self.shader.set_vector4(UniName::OutlineColor, &Vector4::from((0f32, 0f32, 0f32, 0f32)));
         }
         self.shader.set_uint(UniName::Effect, draw_call.effect);
-        let bg_color = draw_call.background_color.unwrap_or(Color::from_rgba(0u8, 0, 0, 0));
-        self.shader.set_vector4(UniName::BackgroundColor, &Vector4::from(bg_color.to_color_f32().rgba()));
         self.shader.set_float(UniName::T, draw_call.t);
         self.shader.set_uint(UniName::IsGrayscale, if draw_call.common.is_source_grayscale { 1 } else { 0 });
         self.shader.set_matrix4(UniName::Model, &model);
@@ -180,7 +201,6 @@ impl Shader for ExampleShader {
         self.shader.init_uniform_location(Effect);
         self.shader.init_uniform_location(T);
         self.shader.init_uniform_location(IsGrayscale);
-        self.shader.init_uniform_location(BackgroundColor);
     }
 }
 
@@ -204,6 +224,8 @@ impl ShaderDrawCall for ExampleDrawCall {
         let render_stem: &RenderStem<_> = &graphic_elem.render_stem;
         let render_params: &ExampleRenderParams = &graphic_elem.render_params;
 
+        let (effect, effect_color) = render_params.effect.as_draw_params();
+
         match render_stem {
             RenderStem::Texture { id: texture_id } => {
                 let texture = canvas.get_texture(*texture_id).ok_or(SprowlError::MissingTextureId(*texture_id))?;
@@ -211,8 +233,8 @@ impl ShaderDrawCall for ExampleDrawCall {
                     source: RenderSource::from(texture),
                     common: CommonShaderDrawParams::new(render_params.draw_pos),
                     outline: render_params.outline,
-                    effect: render_params.effect,
-                    background_color: render_params.background_color,
+                    effect,
+                    effect_color,
                     t: render_params.t,
                 };
                 results.push(draw_call);
@@ -222,8 +244,8 @@ impl ShaderDrawCall for ExampleDrawCall {
                     source: RenderSource::from(shape),
                     common: CommonShaderDrawParams::new(render_params.draw_pos),
                     outline: render_params.outline,
-                    effect: render_params.effect,
-                    background_color: render_params.background_color,
+                    effect,
+                    effect_color,
                     t: render_params.t,
                 };
                 results.push(draw_call);
@@ -240,8 +262,8 @@ impl ShaderDrawCall for ExampleDrawCall {
                         source: RenderSource::from(character.texture),
                         common,
                         outline: render_params.outline,
-                        effect: render_params.effect,
-                        background_color: render_params.background_color,
+                        effect,
+                        effect_color,
                         t: render_params.t
                     })
 
@@ -255,26 +277,24 @@ impl ShaderDrawCall for ExampleDrawCall {
 
 fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas) {
     let stick_id = canvas.add_texture_from_image_path("res/stick.png").unwrap();
-    let font_id = canvas.add_font_from_bytes(include_bytes!("/usr/share/fonts/TTF/DejaVuSansMono.ttf"));
+    let characters_id = canvas.add_texture_from_image_path("res/characters.png").unwrap();
+    let shapes_id = canvas.add_texture_from_image_path("res/shapes.png").unwrap();
+    let font_id = canvas.add_font_from_bytes(include_bytes!("../res/DejaVuSerif.ttf"));
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let mut entity_x: i32 = 500;
     let mut entity_y: i32 = 500;
 
-    static S_1: &str = "AZERTYUIOP^$QSDFGHJKLM%µWXCVBN";
-    static S_2: &str = "Pote is SO kek";
-    static S_3: &str = "O";
-    static S_4: &str = "Well     spaced      text";
+    static LOREM_IPSUM: &str = " Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\
+Suspendisse lacinia quis nunc vel pulvinar. In ac tincidunt diam. Etiam maximus dui risus, sed accumsan nisi cursus ac.\n\
+Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Nam dignissim efficitur aliquet.\n\
+Vestibulum ut fermentum libero. Quisque rutrum, tellus finibus tincidunt eleifend, dui felis facilisis arcu, eget interdum justo velit vitae velit.\n\
+Aliquam erat volutpat. Pellentesque fringilla massa eu lorem tempor maximus. Fusce vel mi tortor.";
 
     let mut shader = ExampleShader::new().unwrap();
 
     'running: for t in 0.. {
-        let text = match (t / 120) % 4 {
-            0 => S_1,
-            1 => S_2,
-            2 => S_3,
-            _ => S_4
-        };
+        let text = LOREM_IPSUM;
 
         let t0 = ::std::time::Instant::now();
         for event in event_pump.poll_iter() {
@@ -306,6 +326,16 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas
 
         let mut graphic_elements: Vec<GraphicElement<&'static str, ExampleRenderParams>> = vec!();
         {
+            // various shapes with outline
+            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 0), Origin::new());
+            render_params.outline = Some(Color::from_rgb(255, 128, 0));
+            graphic_elements.push( GraphicElement {
+                render_stem: RenderStem::Texture { id: shapes_id },
+                render_params,
+            })
+        }
+        {
+            // sprite with a border
             let mut render_params = ExampleRenderParams::new(Vector2::new(entity_x, entity_y), Origin::Center);
             render_params.outline = Some(Color::from_rgb(255u8, 0, 255u8));
             graphic_elements.push(
@@ -316,14 +346,45 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas
             );
         }
         {
+            // text
             let mut render_params = ExampleRenderParams::new(Vector2::new(0, 0), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::from_rgb(255u8, 0, 0));
+            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
             graphic_elements.push(
                 GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text, font_size: 32.0 },
+                    render_stem: RenderStem::Text { font_id, text, font_size: 48.0 },
                     render_params,
                 },
             );
+        }
+        {
+            // solid shape
+            let mut render_params = ExampleRenderParams::new(Vector2::new(300, 300), Origin::Center);
+            render_params.effect = Effect::Solid(Color::from_rgb(64, 64, 64));
+            graphic_elements.push( GraphicElement {
+                render_stem: RenderStem::Shape { shape: Shape::Rect(50, 50) },
+                render_params,
+            })
+        }
+        {
+            // glowing animated rect
+            let mut render_params = ExampleRenderParams::new(Vector2::new(300, 300), Origin::Center);
+            render_params.effect = Effect::Glowing(Color::from_rgb(64, 192, 1));
+            render_params.t = t as f32 / 10.0;
+            graphic_elements.push( GraphicElement {
+                render_stem: RenderStem::Shape { shape: Shape::Rect(50, 50) },
+                render_params,
+            })
+        }
+        {
+            // rotating sprite
+            let mut render_params = ExampleRenderParams::new(Vector2::new(300, 300), Origin::new());
+            render_params.crop = Some((32, 160, 32, 32));
+            render_params.rotate = Some((t as f32, Origin::Center));
+            render_params.scale = Some(3.0);
+            graphic_elements.push( GraphicElement {
+                render_stem: RenderStem::Texture { id: characters_id },
+                render_params,
+            })
         }
         canvas.draw(&mut shader, &graphic_elements);
         window.gl_swap_window();
@@ -332,127 +393,6 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas
         ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 30));
     }
 }
-
-// fn advanced(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas) {
-//     use sprowl::shaders::advanced::*;
-//     let characters_id = canvas.add_texture_from_image_path("res/characters.png").unwrap();
-//     let shapes_id = canvas.add_texture_from_image_path("res/shapes.png").unwrap();
-//     let font_id = canvas.add_font_from_bytes(include_bytes!("/usr/share/fonts/TTF/DejaVuSansMono.ttf"));
-//     let mut event_pump = sdl_context.event_pump().unwrap();
-
-
-//     let mut shader = AdvancedShader::new().unwrap();
-
-//     let mut outline = false;
-//     let mut scale = false;
-
-//     'running: for t in 0.. {
-//         let t0 = ::std::time::Instant::now();
-//         for event in event_pump.poll_iter() {
-//             match event {
-//                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-//                     break 'running
-//                 },
-//                 Event::Window { win_event: WindowEvent::SizeChanged(w, h), ..} => {
-//                     debug_assert!(w >= 0);
-//                     debug_assert!(h >= 0);
-//                     canvas.set_size((w as u32, h as u32));
-//                 },
-//                 Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::A), repeat: false, .. } => {
-//                     outline = !outline;
-//                 },
-//                 Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::E), repeat: false, .. } => {
-//                     scale = !scale;
-//                 },
-//                 _ => {}
-//             }
-//         }
-//         canvas.clear(Some(Color::from_rgb(128u8, 128, 128)));
-
-//         let graphic_elements: Vec<GraphicElement<&'static str, AdvancedRenderParams>> = vec!(
-//             GraphicElement {
-//                 render_stem: RenderStem::Texture { id: shapes_id },
-//                 render_params: RenderParams {
-//                     common: CommonRenderParams::new(DrawPos { origin: Origin::Center , x: 300, y: 300 }),
-//                     custom: AdvancedRenderParams {
-//                         outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
-//                         rotate: None,
-//                         scale: None,
-//                         effect: 0,
-//                         background_color: None,
-//                         t: t as f32 / 10.0,
-//                     }
-//                 }
-//             },
-//             GraphicElement {
-//                 render_stem: RenderStem::Texture { id: characters_id },
-//                 render_params: RenderParams {
-//                     common: CommonRenderParams {
-//                         crop: Some((32, 160, 32, 32)),
-//                         draw_pos: DrawPos { origin: Origin::new(), x: 100, y: 100 },
-//                         is_source_grayscale: false,
-//                     },
-//                     custom: AdvancedRenderParams {
-//                         outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
-//                         rotate: Some((t as f32, Origin::Center)),
-//                         scale: if scale { Some(3.0) } else { None },
-//                         effect: 0,
-//                         background_color: None,
-//                         t: t as f32 / 10.0,
-//                     }
-//                 }
-//             },
-//             GraphicElement {
-//                 render_stem: RenderStem::Shape { shape: crate::Shape::Rect(200, 100) },
-//                 render_params: RenderParams {
-//                     common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: 200, y: 200 }),
-//                     custom: AdvancedRenderParams {
-//                         outline: None,
-//                         rotate: None,
-//                         scale: None,
-//                         effect: 1,
-//                         background_color: None,
-//                         t: t as f32 / 10.0,
-//                     }
-//                 }
-//             },
-//             GraphicElement {
-//                 render_stem: RenderStem::Shape { shape: crate::Shape::Rect(50, 50) },
-//                 render_params: RenderParams {
-//                     common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: 300, y: 300 }),
-//                     custom: AdvancedRenderParams {
-//                         outline: None,
-//                         rotate: None,
-//                         scale: None,
-//                         effect: 2,
-//                         background_color: Some(Color::from_rgba(64, 64, 64u8, 255u8)),
-//                         t: t as f32 / 10.0,
-//                     }
-//                 }
-//             },
-//             GraphicElement {
-//                 render_stem: RenderStem::Text { font_id, text: "Potekek", font_size: 30.0, max_width: None },
-//                 render_params: RenderParams {
-//                     common: CommonRenderParams::new(DrawPos { origin: Origin::Center, x: 0, y: 0 }),
-//                     custom: AdvancedRenderParams {
-//                         outline: if outline { Some(Color::from_rgb(0u8, 0, 255)) } else { None },
-//                         rotate: Some((3.0 * t as f32, Origin::Center)),
-//                         scale: if scale { Some(3.0) } else { None },
-//                         effect: 0,
-//                         background_color: Some(Color::from_rgb(128u8, 128u8, 128u8)),
-//                         t: t as f32 / 10.0,
-//                     }
-//                 }
-//             },
-//         );
-//         canvas.draw(&mut shader, &graphic_elements);
-//         window.gl_swap_window();
-
-//         let _delta_t = ::std::time::Instant::now() - t0;
-//         // println!("{} fps (theory)", 1_000_000_000 / delta_t.subsec_nanos());
-//         ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 60));
-//     }
-// }
 
 fn main() {
     let sdl_context = sdl2::init().unwrap();
