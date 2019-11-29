@@ -43,13 +43,12 @@ void main()
 {
     if (effect == uint(1)) {
         // glowing effect
-        const vec4 base_color = vec4(ivec4(247, 118, 34, 255)) / 255.0;
-        const vec4 half_base_color = base_color / 2.0;
-        color = half_base_color * vec4(
+        const vec3 base_color = vec3(ivec3(247, 118, 34)) / 255.0;
+        const vec3 half_base_color = base_color / 2.0;
+        color.rgb = half_base_color * vec3(
             cos(- 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y) * cos(t / 10.0),
             cos( 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y),
-            cos( 10.0 * TexCoords.x) * sin(- 10.0 * TexCoords.y),
-            1.0
+            cos( 10.0 * TexCoords.x) * sin(- 10.0 * TexCoords.y)
         ) + half_base_color;
         return;
     }
@@ -60,6 +59,14 @@ void main()
     }
 
     color = true_tex_color(img, TexCoords);
+    if (effect == uint(3)) {
+        vec3 diff = (color.rgb - effect_color.rgb) / 4.0;
+        color.rgb = effect_color.rgb + diff * vec3(
+            cos(TexCoords.x * 20.0 * TexCoords.y * t),
+            cos(TexCoords.x * 10.0 * TexCoords.y * t),
+            cos(TexCoords.x * -40.0 * TexCoords.y * t)
+        );
+    }
     if (outline_color.a == 0.0) {
         return;
     }

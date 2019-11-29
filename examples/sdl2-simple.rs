@@ -12,7 +12,7 @@ use sprowl::{
     shader::{BaseShader, Shader, Scaling, ShaderDrawCall, CommonShaderDrawParams, RenderSource, self},
     utils::{Shape, Origin, DrawPos},
 };
-use std::cmp::max;
+use std::cmp::{max, min};
 
 static FRAGMENT_SHADER_SOURCE: &'static str = include_str!("advanced_fs.glsl");
 static VERTEX_SHADER_SOURCE: &'static str = include_str!("advanced_vs.glsl");
@@ -50,6 +50,7 @@ pub enum Effect {
     None,
     Glowing(Color<u8>),
     Solid(Color<u8>),
+    TextWave(Color<u8>),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -112,6 +113,7 @@ impl Effect {
             Effect::None => (0, Color::from_rgba(0,0,0,0)),
             Effect::Glowing(c) => (1, c),
             Effect::Solid(c) => (2, c),
+            Effect::TextWave(c) => (3, c),
         }
     }
 }
@@ -224,6 +226,7 @@ impl Shader for ExampleShader {
             self.shader.set_vector4(UniName::OutlineColor, &Vector4::from((0f32, 0f32, 0f32, 0f32)));
         }
         self.shader.set_uint(UniName::Effect, draw_call.effect);
+        self.shader.set_vector4(UniName::EffectColor, &Vector4::from(draw_call.effect_color.to_color_f32().rgba()));
         self.shader.set_float(UniName::T, draw_call.t);
         self.shader.set_uint(UniName::IsGrayscale, if draw_call.common.is_source_grayscale { 1 } else { 0 });
         self.shader.set_matrix4(UniName::Model, &model);
@@ -252,6 +255,7 @@ impl Shader for ExampleShader {
         self.shader.init_uniform_location(OutlineColor);
         self.shader.init_uniform_location(OutlineThickness);
         self.shader.init_uniform_location(Effect);
+        self.shader.init_uniform_location(EffectColor);
         self.shader.init_uniform_location(T);
         self.shader.init_uniform_location(IsGrayscale);
     }
@@ -337,9 +341,11 @@ impl ShaderDrawCall for ExampleDrawCall {
                             max(old_x as u32, word.origin.x as u32 + word.size.x as u32),
                             max(old_y as u32, word.origin.y as u32 + word.size.y as u32)
                         ));
-                    let actual_bb = Vector2::new(actual_bb.0, actual_bb.1);
+                    let mut actual_bb = Vector2::new(actual_bb.0, actual_bb.1);
                     assert!(actual_bb.x <= text_params.0.x);
-                    assert!(actual_bb.y <= text_params.0.y);
+                    // this is to avoid an operator overflow, if the font_size is higher than the
+                    // boudning box, we won't get an error.
+                    actual_bb.y = min(actual_bb.y, text_params.0.y);
                     let diff = text_params.0 - actual_bb;
                     let offset = Vector2::new(text_params.1.offset(diff.x), text_params.2.offset(diff.y));
                     for WordPos { word, origin, .. } in font_layout {
@@ -499,11 +505,13 @@ Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac tu
         {
             // right-aligned text
             let mut render_params = ExampleRenderParams::new(Vector2::new(0, 80), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
+            render_params.outline = Some(Color::white());
+            render_params.effect = Effect::TextWave(Color::from_rgb(147, 87, 186));
+            render_params.t = t as f32;
             render_params.text_params = Some((Vector2::new(1280, 40), TextAlign::Right, Default::default()));
             graphic_elements.push(
                 GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text: "Right-aligned text (relative towindow)", font_size: 32.0 },
+                    render_stem: RenderStem::Text { font_id, text: "Right-aligned text THING (relative to window)", font_size: 64.0 },
                     render_params,
                 },
             );
