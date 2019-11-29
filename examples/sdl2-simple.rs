@@ -21,6 +21,8 @@ static VERTEX_SHADER_SOURCE: &'static str = include_str!("advanced_vs.glsl");
 pub enum ExampleUniformName {
     View,
     Model,
+    Texture0,
+    Texture1,
     OutlineColor,
     OutlineThickness,
     Effect,
@@ -36,6 +38,8 @@ impl shader::Uniform for ExampleUniformName {
             View => "view",
             Model => "model",
             OutlineColor => "outline_color",
+            Texture0 => "texture0",
+            Texture1 => "texture1",
             OutlineThickness => "outline_thickness",
             EffectColor => "effect_color",
             Effect => "effect",
@@ -126,6 +130,8 @@ pub struct ExampleRenderParams {
     pub scale: Option<f32>,
     pub outline: Option<Color<u8>>,
     pub effect: Effect,
+    /// id of the 2nd texture to bind
+    pub second_bind: Option<u32>,
     /// bounding_box, text_align, vertical_align
     pub text_params: Option<(Vector2<u32>, TextAlign, VerticalAlign)>,
     pub t: f32,
@@ -140,6 +146,7 @@ impl ExampleRenderParams {
             scale: Default::default(),
             outline: Default::default(),
             effect: Default::default(),
+            second_bind: Default::default(),
             text_params: Default::default(),
             t: 0.0,
         }
@@ -233,6 +240,9 @@ impl Shader for ExampleShader {
     }
 
     fn apply_global_uniforms(&mut self, (window_width, window_height): (u32, u32)) {
+        self.shader.set_int(ExampleUniformName::Texture0, 0);
+        self.shader.set_int(ExampleUniformName::Texture1, 1);
+
         let view_matrix = Matrix4::<f32>::from(cgmath::Ortho {
             left: 0.0,
             right: (window_width as f32) / self.zoom_level,
@@ -252,6 +262,8 @@ impl Shader for ExampleShader {
         use ExampleUniformName::*;
         self.shader.init_uniform_location(Model);
         self.shader.init_uniform_location(View);
+        self.shader.init_uniform_location(Texture0);
+        self.shader.init_uniform_location(Texture1);
         self.shader.init_uniform_location(OutlineColor);
         self.shader.init_uniform_location(OutlineThickness);
         self.shader.init_uniform_location(Effect);
@@ -280,6 +292,12 @@ impl ShaderDrawCall for ExampleDrawCall {
 
         let render_stem: &RenderStem<_> = &graphic_elem.render_stem;
         let render_params: &ExampleRenderParams = &graphic_elem.render_params;
+
+        if let Some(tid) = render_params.second_bind {
+            if let Some(t) = canvas.get_texture(tid) {
+                t.bind(1);
+            }
+        }
 
         let (effect, effect_color) = render_params.effect.as_draw_params();
 
@@ -376,6 +394,7 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas
     let stick_id = canvas.add_texture_from_image_path("res/stick.png").unwrap();
     let characters_id = canvas.add_texture_from_image_path("res/characters.png").unwrap();
     let shapes_id = canvas.add_texture_from_image_path("res/shapes.png").unwrap();
+    let noise_id = canvas.add_texture_from_image_path("res/noise.png").unwrap();
     let font_id = canvas.add_font_from_bytes(include_bytes!("../res/DejaVuSerif.ttf"));
     let mut event_pump = sdl_context.event_pump().unwrap();
 
@@ -505,8 +524,10 @@ Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac tu
         {
             // right-aligned text
             let mut render_params = ExampleRenderParams::new(Vector2::new(0, 80), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::white());
-            render_params.effect = Effect::TextWave(Color::from_rgb(147, 87, 186));
+            render_params.outline = Some(Color::black());
+            // render_params.effect = Effect::TextWave(Color::from_rgb(43, 96, 222));
+            render_params.effect = Effect::TextWave(Color::from_rgb(255, 255, 222));
+            render_params.second_bind = Some(noise_id);
             render_params.t = t as f32;
             render_params.text_params = Some((Vector2::new(1280, 40), TextAlign::Right, Default::default()));
             graphic_elements.push(

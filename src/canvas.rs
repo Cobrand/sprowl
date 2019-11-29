@@ -99,6 +99,10 @@ impl Canvas {
             gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, 4 * size_of::<GLfloat>() as i32, ptr::null::<GLfloat>().offset(2) as *const _);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
             gl::BindVertexArray(0);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::Enable(gl::TEXTURE_2D);
+            gl::ActiveTexture(gl::TEXTURE1);
+            gl::Enable(gl::TEXTURE_2D);
             
             let mut canvas = Canvas {
                 vao: vao,
@@ -269,7 +273,7 @@ impl Canvas {
 
     fn draw_elem<S: Shader>(&mut self, shader: &mut S, draw_call: S::D) {
         if let RenderSource::Texture(texture) = draw_call.render_source() {
-            texture.bind();
+            texture.bind(0);
         }
 
         let pad = draw_call.common_params().pad;

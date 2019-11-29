@@ -3,9 +3,19 @@ in vec2 TexCoords;
 
 out vec4 color;
 
+uniform sampler2D texture0;
+uniform sampler2D texture1;
+uniform sampler2D texture2;
+uniform sampler2D texture3;
+uniform sampler2D texture4;
+uniform sampler2D texture5;
+uniform sampler2D texture6;
+uniform sampler2D texture7;
+uniform sampler2D texture8;
+uniform sampler2D texture9;
+
 uniform vec2 outline_thickness;
 uniform vec4 outline_color;
-uniform sampler2D img;
 uniform uint effect;
 uniform vec4 effect_color;
 uniform float t;
@@ -58,19 +68,20 @@ void main()
         return;
     }
 
-    color = true_tex_color(img, TexCoords);
+    color = true_tex_color(texture0, TexCoords);
     if (effect == uint(3)) {
-        vec3 diff = (color.rgb - effect_color.rgb) / 4.0;
-        color.rgb = effect_color.rgb + diff * vec3(
-            cos(TexCoords.x * 20.0 * TexCoords.y * t),
-            cos(TexCoords.x * 10.0 * TexCoords.y * t),
-            cos(TexCoords.x * -40.0 * TexCoords.y * t)
+        vec2 noisecoords = vec2(
+            TexCoords.x - (5.0 * cos(t / 30.0) + t) / 1024.0,
+            TexCoords.y - (5.0 * sin(t / 20.0) + t) / 1024.0
         );
+        vec3 noise = texture(texture1, noisecoords).rgb;
+        const vec3 gold = vec3(ivec3(255, 208, 0)) / 255.0;
+        color.rgb = mix(effect_color.rgb, gold, vec3(noise.g, noise.b, (noise.g+noise.b) / 2.0));
     }
     if (outline_color.a == 0.0) {
         return;
     }
-    float v = get_border_alpha(img, TexCoords, outline_thickness);
+    float v = get_border_alpha(texture0, TexCoords, outline_thickness);
     if (v > 0.0) {
         color = blend(color, vec4(outline_color.rgb, v));
     }

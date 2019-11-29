@@ -72,8 +72,8 @@ impl Texture2D {
                 gl::TexImage2D(gl::TEXTURE_2D, 0, format.to_gl_format() as i32, width as i32, height as i32, 0, format.to_gl_format(), gl::UNSIGNED_BYTE, std::ptr::null());
             }
 
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::MIRRORED_REPEAT as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::MIRRORED_REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
 
@@ -101,12 +101,21 @@ impl Texture2D {
         (self.width, self.height)
     }
 
-    #[allow(dead_code)]
-    pub (crate) fn bind(&self) {
+    pub fn bind(&self, i: u8) {
         unsafe {
-            gl::ActiveTexture(gl::TEXTURE0);
-        }
-        unsafe {
+            let t = match i {
+                0 => gl::TEXTURE0,
+                1 => gl::TEXTURE1,
+                2 => gl::TEXTURE2,
+                3 => gl::TEXTURE3,
+                4 => gl::TEXTURE4,
+                5 => gl::TEXTURE5,
+                6 => gl::TEXTURE6,
+                7 => gl::TEXTURE7,
+                8 => gl::TEXTURE8,
+                _ => gl::TEXTURE9,
+            };
+            gl::ActiveTexture(t);
             gl::BindTexture(gl::TEXTURE_2D, self.id);
         }
     }
@@ -139,11 +148,21 @@ impl Texture2DRef {
         (self.width, self.height)
     }
 
-    pub (crate) fn bind(&self) {
+    pub fn bind(&self, i: u8) {
         unsafe {
-            gl::ActiveTexture(gl::TEXTURE0);
-        }
-        unsafe {
+            let t = match i {
+                0 => gl::TEXTURE0,
+                1 => gl::TEXTURE1,
+                2 => gl::TEXTURE2,
+                3 => gl::TEXTURE3,
+                4 => gl::TEXTURE4,
+                5 => gl::TEXTURE5,
+                6 => gl::TEXTURE6,
+                7 => gl::TEXTURE7,
+                8 => gl::TEXTURE8,
+                _ => gl::TEXTURE9,
+            };
+            gl::ActiveTexture(t);
             gl::BindTexture(gl::TEXTURE_2D, self.id);
         }
     }
