@@ -33,6 +33,10 @@ impl Default for Scaling {
 }
 
 impl Scaling {
+    pub fn new(s: f32) -> Scaling {
+        Scaling::Raw(s, s)
+    }
+
     #[inline]
     pub fn compute_scale(self, width: u32, height: u32) -> (f32, f32) {
         match self {

@@ -1,5 +1,0 @@
-Cache text
-Make it easy to use custom shaders
-Outline relative to camera, 2 cases:
-* object is always on camera
-* object is relative to camera

@@ -5,12 +5,14 @@ use sprowl::{
     smallvec::SmallVec,
     Error as SprowlError,
     color::Color,
+    helpers::{AdvancedLayoutIter, WordPos},
     Canvas,
     gelem::{RenderStem, GraphicElement},
     font_renderer::FontStemDrawCall,
-    shader::{BaseShader, Shader, ShaderDrawCall, CommonShaderDrawParams, RenderSource, self},
+    shader::{BaseShader, Shader, Scaling, ShaderDrawCall, CommonShaderDrawParams, RenderSource, self},
     utils::{Shape, Origin, DrawPos},
 };
+use std::cmp::max;
 
 static FRAGMENT_SHADER_SOURCE: &'static str = include_str!("advanced_fs.glsl");
 static VERTEX_SHADER_SOURCE: &'static str = include_str!("advanced_vs.glsl");
@@ -50,6 +52,54 @@ pub enum Effect {
     Solid(Color<u8>),
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum TextAlign {
+    Left,
+    Right,
+    Center,
+}
+
+impl TextAlign {
+    /// diff is the difference between the bounding box and the actual content bounding box.
+    pub fn offset(&self, diff: u32) -> u32 {
+        match self {
+            TextAlign::Center => diff / 2,
+            TextAlign::Right => diff,
+            TextAlign::Left => 0
+        }
+    }
+}
+
+impl Default for TextAlign {
+    fn default() -> TextAlign {
+        TextAlign::Left
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum VerticalAlign {
+    Top,
+    Center,
+    Bottom,
+}
+
+impl VerticalAlign {
+    /// diff is the difference between the bounding box and the actual content bounding box.
+    pub fn offset(&self, diff: u32) -> u32 {
+        match self {
+            VerticalAlign::Center => diff / 2,
+            VerticalAlign::Top => 0,
+            VerticalAlign::Bottom => diff,
+        }
+    }
+}
+
+impl Default for VerticalAlign {
+    fn default() -> VerticalAlign {
+        VerticalAlign::Center
+    }
+}
+
 impl Default for Effect {
     fn default() -> Effect {
         Effect::None
@@ -74,6 +124,8 @@ pub struct ExampleRenderParams {
     pub scale: Option<f32>,
     pub outline: Option<Color<u8>>,
     pub effect: Effect,
+    /// bounding_box, text_align, vertical_align
+    pub text_params: Option<(Vector2<u32>, TextAlign, VerticalAlign)>,
     pub t: f32,
 }
 
@@ -86,6 +138,7 @@ impl ExampleRenderParams {
             scale: Default::default(),
             outline: Default::default(),
             effect: Default::default(),
+            text_params: Default::default(),
             t: 0.0,
         }
     }
@@ -229,9 +282,13 @@ impl ShaderDrawCall for ExampleDrawCall {
         match render_stem {
             RenderStem::Texture { id: texture_id } => {
                 let texture = canvas.get_texture(*texture_id).ok_or(SprowlError::MissingTextureId(*texture_id))?;
+                let mut common: CommonShaderDrawParams = CommonShaderDrawParams::new(render_params.draw_pos);
+                common.crop = render_params.crop;
+                common.rotate = render_params.rotate;
+                common.scaling = render_params.scale.map(|s| Scaling::new(s)).unwrap_or(Scaling::None);
                 let draw_call: ExampleDrawCall = ExampleDrawCall {
                     source: RenderSource::from(texture),
-                    common: CommonShaderDrawParams::new(render_params.draw_pos),
+                    common,
                     outline: render_params.outline,
                     effect,
                     effect_color,
@@ -240,9 +297,13 @@ impl ShaderDrawCall for ExampleDrawCall {
                 results.push(draw_call);
             },
             RenderStem::Shape { shape } => {
+                let mut common: CommonShaderDrawParams = CommonShaderDrawParams::new(render_params.draw_pos);
+                common.crop = render_params.crop;
+                common.rotate = render_params.rotate;
+                common.scaling = render_params.scale.map(|s| Scaling::new(s)).unwrap_or(Scaling::None);
                 let draw_call: ExampleDrawCall = ExampleDrawCall {
                     source: RenderSource::from(shape),
-                    common: CommonShaderDrawParams::new(render_params.draw_pos),
+                    common,
                     outline: render_params.outline,
                     effect,
                     effect_color,
@@ -251,24 +312,53 @@ impl ShaderDrawCall for ExampleDrawCall {
                 results.push(draw_call);
             },
             RenderStem::Text { font_id, font_size, text } => {
-                let font_renderer = canvas.get_font_mut(*font_id).ok_or(SprowlError::MissingTextureId(*font_id))?;
-                let characters: Vec<FontStemDrawCall> = font_renderer.word_to_draw_call(text.as_ref(), *font_size, render_params.draw_pos.pos);
-                results.reserve(characters.len());
-                for character in characters {
-                    let mut common = CommonShaderDrawParams::new(DrawPos::new(character.dest_origin));
-                    common.crop = Some(character.source_crop);
+                // necessary to avoid code duplication and make the borrow checker happy.
+                let stem_to_real_draw_call = |character_stem_call: FontStemDrawCall<'_>| -> ExampleDrawCall {
+                    let mut common = CommonShaderDrawParams::new(DrawPos::new(character_stem_call.dest_origin));
+                    common.crop = Some(character_stem_call.source_crop);
                     common.is_source_grayscale = true;
                     common.pad = Some(1);
-                    results.push(ExampleDrawCall {
-                        source: RenderSource::from(character.texture),
+                    ExampleDrawCall {
+                        source: RenderSource::from(character_stem_call.texture),
                         common,
                         outline: render_params.outline,
                         effect,
                         effect_color,
                         t: render_params.t
-                    })
-
-                }
+                    }
+                };
+                let font_renderer = canvas.get_font_mut(*font_id).ok_or(SprowlError::MissingTextureId(*font_id))?;
+                if let Some(text_params) = render_params.text_params {
+                    let topleft = render_params.draw_pos.pos - render_params.draw_pos.origin.compute_relative_origin(text_params.0);
+                    let font_layout = AdvancedLayoutIter::new(font_renderer.font(), text.as_ref(), *font_size, Vector2::new(0.0, 0.0), text_params.0.x).collect::<Vec<_>>();
+                    let actual_bb = font_layout
+                        .iter()
+                        .fold((0, 0), |(old_x, old_y), word| (
+                            max(old_x as u32, word.origin.x as u32 + word.size.x as u32),
+                            max(old_y as u32, word.origin.y as u32 + word.size.y as u32)
+                        ));
+                    let actual_bb = Vector2::new(actual_bb.0, actual_bb.1);
+                    assert!(actual_bb.x <= text_params.0.x);
+                    assert!(actual_bb.y <= text_params.0.y);
+                    let diff = text_params.0 - actual_bb;
+                    let offset = Vector2::new(text_params.1.offset(diff.x), text_params.2.offset(diff.y));
+                    for WordPos { word, origin, .. } in font_layout {
+                        let actual_pos = topleft + offset.cast::<i32>().unwrap() + origin.cast::<i32>().unwrap();
+                        let characters = font_renderer.word_to_draw_call(word, *font_size, actual_pos);
+                        results.reserve(characters.len());
+                        for character in characters {
+                            let draw_call = stem_to_real_draw_call(character);
+                            results.push(draw_call);
+                        };
+                    };
+                } else {
+                    let characters = font_renderer.word_to_draw_call(text.as_ref(), *font_size, render_params.draw_pos.pos);
+                    results.reserve(characters.len());
+                    for character in characters {
+                        let draw_call = stem_to_real_draw_call(character);
+                        results.push(draw_call);
+                    };
+                };
             }
         }
 
@@ -286,16 +376,22 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas
     let mut entity_x: i32 = 500;
     let mut entity_y: i32 = 500;
 
-    static LOREM_IPSUM: &str = " Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\
-Suspendisse lacinia quis nunc vel pulvinar. In ac tincidunt diam. Etiam maximus dui risus, sed accumsan nisi cursus ac.\n\
-Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Nam dignissim efficitur aliquet.\n\
-Vestibulum ut fermentum libero. Quisque rutrum, tellus finibus tincidunt eleifend, dui felis facilisis arcu, eget interdum justo velit vitae velit.\n\
-Aliquam erat volutpat. Pellentesque fringilla massa eu lorem tempor maximus. Fusce vel mi tortor.";
+    static LOREM_IPSUM: &str = "AV. Wa. Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\
+Suspendisse lacinia quis nunc vel pulvinar. In ac tincidunt diam. Etiam maximus dui risus, sed accumsan nisi cursus ac.\n\n\
+Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Nam dignissim efficitur aliquet.";//\n\
+// Vestibulum ut fermentum libero. Quisque rutrum, tellus finibus tincidunt eleifend, dui felis facilisis arcu, eget interdum justo velit vitae velit.\n\
+// Aliquam erat volutpat. Pellentesque fringilla massa eu lorem tempor maximus. Fusce vel mi tortor.";
 
     let mut shader = ExampleShader::new().unwrap();
+    let mut scale: f32 = 1.0;
 
     'running: for t in 0.. {
-        let text = LOREM_IPSUM;
+        let loading_text = match (t / 20) % 4 {
+            0 => "Loading",
+            1 => "Loading.",
+            2 => "Loading..",
+            _ => "Loading...",
+        };
 
         let t0 = ::std::time::Instant::now();
         for event in event_pump.poll_iter() {
@@ -307,6 +403,12 @@ Aliquam erat volutpat. Pellentesque fringilla massa eu lorem tempor maximus. Fus
                     debug_assert!(w >= 0);
                     debug_assert!(h >= 0);
                     canvas.set_size((w as u32, h as u32));
+                },
+                Event::KeyDown { keycode: Some(Keycode::KpPlus), repeat: false, ..} => {
+                    scale *= 2.0;
+                },
+                Event::KeyDown { keycode: Some(Keycode::KpMinus), repeat: false, ..} => {
+                    scale *= 0.5;
                 },
                 Event::KeyDown { keycode: Some(Keycode::Up), repeat: false, ..} => {
                     entity_y -= 50;
@@ -323,7 +425,8 @@ Aliquam erat volutpat. Pellentesque fringilla massa eu lorem tempor maximus. Fus
                 _ => {}
             }
         }
-        canvas.clear(Some(Color::from_rgb(128u8, 128, 128)));
+        shader.zoom_level = scale;
+        canvas.clear(Some(Color::from_rgb(192u8, 192, 192)));
 
         let mut graphic_elements: Vec<GraphicElement<&'static str, ExampleRenderParams>> = vec!();
         {
@@ -347,12 +450,60 @@ Aliquam erat volutpat. Pellentesque fringilla massa eu lorem tempor maximus. Fus
             );
         }
         {
-            // text
+            // regular text
             let mut render_params = ExampleRenderParams::new(Vector2::new(0, 0), Origin::TopLeft(0, 0));
             render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
             graphic_elements.push(
                 GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text, font_size: 48.0 },
+                    render_stem: RenderStem::Text { font_id, text: "Some Example with no BB & border: WAVE (kerning test)\n<- newline shows this", font_size: 32.0 },
+                    render_params,
+                },
+            );
+        }
+        {
+            // centered text
+            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 40), Origin::TopLeft(0, 0));
+            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
+            render_params.text_params = Some((Vector2::new(1280, 40), TextAlign::Center, Default::default()));
+            graphic_elements.push(
+                GraphicElement {
+                    render_stem: RenderStem::Text { font_id, text: "Centered text (relative towindow)", font_size: 32.0 },
+                    render_params,
+                },
+            );
+        }
+        {
+            // middle text
+            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 0), Origin::TopLeft(0, 0));
+            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
+            render_params.text_params = Some((Vector2::new(1280, 720), TextAlign::Center, VerticalAlign::Center));
+            graphic_elements.push(
+                GraphicElement {
+                    render_stem: RenderStem::Text { font_id, text: loading_text, font_size: 32.0 },
+                    render_params,
+                },
+            );
+        }
+        {
+            // multiline text
+            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 400), Origin::TopLeft(0, 0));
+            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
+            render_params.text_params = Some((Vector2::new(1280, 720), TextAlign::Left, VerticalAlign::Top));
+            graphic_elements.push(
+                GraphicElement {
+                    render_stem: RenderStem::Text { font_id, text: LOREM_IPSUM, font_size: 32.0 },
+                    render_params,
+                },
+            );
+        }
+        {
+            // right-aligned text
+            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 80), Origin::TopLeft(0, 0));
+            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
+            render_params.text_params = Some((Vector2::new(1280, 40), TextAlign::Right, Default::default()));
+            graphic_elements.push(
+                GraphicElement {
+                    render_stem: RenderStem::Text { font_id, text: "Right-aligned text (relative towindow)", font_size: 32.0 },
                     render_params,
                 },
             );
