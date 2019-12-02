@@ -4,14 +4,14 @@ use sprowl::{
     cgmath::{Matrix4, Vector2, Vector3, Vector4},
     smallvec::SmallVec,
     Error as SprowlError,
-    color::Color,
-    helpers::{AdvancedLayoutIter, WordPos},
+    Color,
     Canvas,
-    gelem::{RenderStem, GraphicElement},
-    font_renderer::FontStemDrawCall,
-    shader::{BaseShader, Shader, Scaling, ShaderDrawCall, CommonShaderDrawParams, RenderSource, self},
+    font::{FontStemDrawCall, AdvancedLayoutIter, WordPos},
+    render::{RenderStem, GraphicElement, RenderSource},
+    shader::{BaseShader, Shader, Scaling, ShaderDrawCall, CommonShaderDrawParams, self},
     utils::{Shape, Origin, DrawPos},
 };
+
 use std::cmp::{max, min};
 
 static FRAGMENT_SHADER_SOURCE: &'static str = include_str!("advanced_fs.glsl");
@@ -391,25 +391,25 @@ impl ShaderDrawCall for ExampleDrawCall {
 }
 
 fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas) {
+    // add the resouces
     let stick_id = canvas.add_texture_from_image_path("res/stick.png").unwrap();
     let characters_id = canvas.add_texture_from_image_path("res/characters.png").unwrap();
     let shapes_id = canvas.add_texture_from_image_path("res/shapes.png").unwrap();
     let noise_id = canvas.add_texture_from_image_path("res/noise.png").unwrap();
+
+    // font must always be from static resources, so use the include_bytes! macro.
     let font_id = canvas.add_font_from_bytes(include_bytes!("../res/DejaVuSerif.ttf"));
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let mut entity_x: i32 = 500;
     let mut entity_y: i32 = 500;
 
-    static LOREM_IPSUM: &str = "AV. Wa. Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\
-Suspendisse lacinia quis nunc vel pulvinar. In ac tincidunt diam. Etiam maximus dui risus, sed accumsan nisi cursus ac.\n\n\
-Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Nam dignissim efficitur aliquet.";//\n\
-// Vestibulum ut fermentum libero. Quisque rutrum, tellus finibus tincidunt eleifend, dui felis facilisis arcu, eget interdum justo velit vitae velit.\n\
-// Aliquam erat volutpat. Pellentesque fringilla massa eu lorem tempor maximus. Fusce vel mi tortor.";
-
+    static LOREM_IPSUM: &str = "AV.    Wa.     Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\
+Suspendisse congue bibendum odio, a vulputate diam condimentum vel. Quisque vestibulum tristique odio, ut faucibus mi gravida vel.";
     let mut shader = ExampleShader::new().unwrap();
     let mut scale: f32 = 1.0;
 
+    println!("Running main loop...");
     'running: for t in 0.. {
         let loading_text = match (t / 20) % 4 {
             0 => "Loading",
@@ -516,7 +516,7 @@ Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac tu
             render_params.text_params = Some((Vector2::new(1280, 720), TextAlign::Left, VerticalAlign::Top));
             graphic_elements.push(
                 GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text: LOREM_IPSUM, font_size: 32.0 },
+                    render_stem: RenderStem::Text { font_id, text: LOREM_IPSUM, font_size: 48.0 },
                     render_params,
                 },
             );
@@ -558,10 +558,10 @@ Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac tu
         }
         {
             // rotating sprite
-            let mut render_params = ExampleRenderParams::new(Vector2::new(300, 300), Origin::new());
-            render_params.crop = Some((32, 160, 32, 32));
+            let mut render_params = ExampleRenderParams::new(Vector2::new(350, 350), Origin::Center);
+            render_params.crop = Some((32, 32, 32, 32));
             render_params.rotate = Some((t as f32, Origin::Center));
-            render_params.scale = Some(3.0);
+            render_params.scale = Some(4.0);
             graphic_elements.push( GraphicElement {
                 render_stem: RenderStem::Texture { id: characters_id },
                 render_params,
@@ -576,6 +576,7 @@ Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac tu
 }
 
 fn main() {
+    println!("Starting program");
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     
@@ -605,5 +606,8 @@ fn main() {
         Canvas::new((w, h))
     };
 
+    println!("Initialized OpenGL, running...");
+
+    // now that we are initialized, run the actual program
     run(&sdl_context, &window, canvas);
 }

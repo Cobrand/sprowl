@@ -31,6 +31,7 @@ impl Default for Origin {
     }
 }
 
+/// Represents a position and an origin.
 #[derive(Debug, Copy, Clone)]
 pub struct DrawPos {
     pub pos: Pos,
@@ -51,6 +52,10 @@ pub enum Shape {
 }
 
 impl Shape {
+    /// Returns the maximum size a shape can take.
+    /// 
+    /// Some shapes don't fill the whole area of a square or rect, such as circles or other
+    /// complex geometric shapes.
     pub fn max_size(self) -> (u32, u32) {
         match self {
             Shape::Rect(w, h) => (w, h),

@@ -1,6 +1,5 @@
 //! Various functions and structs which will help you use this crate to its maximum.
 
-
 use rusttype::{Font, Scale as FontScale, GlyphId};
 use cgmath::Vector2;
 
@@ -17,6 +16,10 @@ pub struct AdvancedLayoutIter<'a, 't> {
 }
 
 impl<'a, 't> AdvancedLayoutIter<'a, 't> {
+    /// Create an iterator that returns word positions for a given sentence.
+    ///
+    /// You can specify a `max_width`, where the text will go to the next line if the total with goes 
+    /// beyong `max_width`.
     pub fn new(font: &'a Font<'static>, t: &'t str, size: f32, start: Vector2<f32>, max_width: u32) -> AdvancedLayoutIter<'a, 't> {
         AdvancedLayoutIter {
             font,
@@ -31,6 +34,9 @@ impl<'a, 't> AdvancedLayoutIter<'a, 't> {
     }
 }
 
+/// Only to be consumed (it is returned by `AdvancedLayoutIter`), represents a size and a position
+/// for a given word.
+#[derive(Debug, Clone, Copy)]
 pub struct WordPos<'t> {
     pub word: &'t str,
     pub origin: Vector2<f32>,
@@ -54,6 +60,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
         while let Some((i, c)) = self.chars.next() {
             max_i = i;
             if ! c.is_whitespace() && begin.is_none() {
+                // if we haven't begun a word, set begin to Some(_)
                 origin = self.start + self.offset;
                 begin = Some(i);
             };
@@ -62,9 +69,10 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
                 self.offset.x += self.font.pair_kerning(self.scale, last, g.id());
             }
             self.last_glyph = Some(g.id());
-            self.offset.x += g.h_metrics().advance_width;
             if c.is_whitespace() {
+                // whitespace probably means the end of a word
                 if let Some(begin) = begin {
+                    // we had a beginning to our word, so it's time to end it
                     let len = self.original_str.len();
                     let end = i;
                     assert!(len >= end);
@@ -74,15 +82,23 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
                         size: (self.start + self.offset) + Vector2::new(0.0, character_height) - origin,
                     };
                     if c == '\n' {
+                        // special case: we end the word with a \n, so we need to go to the enxt line.
                         self.offset.y += character_height + v_metrics.line_gap;
                         self.offset.x = self.start.x;
+                    } else {
+                        self.offset.x += g.h_metrics().advance_width;
                     }
                     return Some(word_pos);
                 } else if c == '\n' {
+                    // we didn't have a beginning... but it is a \n? if it is, we still need to
+                    // go to the next line.
                     self.offset.y += character_height + v_metrics.line_gap;
                     self.offset.x = self.start.x;
+                } else {
+                    self.offset.x += g.h_metrics().advance_width;
                 }
             }
+            self.offset.x += g.h_metrics().advance_width;
             if self.offset.x >= self.max_width as f32 {
                 let word_size = self.start.x + self.offset.x - origin.x;
                 self.offset.y += character_height + v_metrics.line_gap;
@@ -91,6 +107,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
             }
         };
         if let Some(begin) = begin {
+            // end of the string, we had a beginning, so end the word
             let len = self.original_str.len();
             let end = max_i + 1;
             assert!(len == end);
@@ -100,6 +117,8 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
                 size: (self.start + self.offset) + Vector2::new(0.0, character_height) - origin,
             })
         } else {
+            // end of the string, and we had to beginning (it was a whitespace of something of the like
+            // as the last character)
             None
         }
     }

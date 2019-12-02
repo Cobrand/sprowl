@@ -1,14 +1,15 @@
 
 mod base_shader;
-mod render_source;
 mod shader_params;
 
 pub use base_shader::*;
-pub use render_source::*;
 pub use shader_params::*;
 
 pub use base_shader::*;
 
+/// The trait defining your shader.
+///
+/// Implement this for your shader, it must have a base_shader member that you must return here.
 pub trait Shader {
     type D: ShaderDrawCall + 'static;
     type U: Uniform;

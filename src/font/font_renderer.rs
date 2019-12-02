@@ -1,9 +1,10 @@
 use rusttype::{Font, Scale as FontScale};
 use cgmath::Vector2;
-use crate::font_cache::Cache as FontCache;
+use crate::font::Cache as FontCache;
 
 use crate::texture::{TextureFormat, Texture2D};
 
+/// FontRenderer represents a font with a GPU caching system.
 pub struct FontRenderer {
     pub (crate) font_cache: FontCache,
     pub (crate) tex: Texture2D,

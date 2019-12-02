@@ -14,17 +14,25 @@
 //!
 //! Checkout sdl2-simple example for a more basic example.
 
+/// Font caching, advanced layouting & rendering
+pub mod font;
+
+// Utility structs and enums. 
 pub mod utils;
-pub mod texture;
+mod texture;
+pub use self::texture::*;
+
 mod canvas;
+pub use self::canvas::*;
+
 mod error;
-pub mod helpers;
+pub use self::error::{SprowlError as Error};
 
-pub mod font_renderer;
-mod font_cache;
+mod color;
+pub use self::color::*;
 
-pub mod color;
-pub mod gelem;
+/// Everything to pass to the canvas to draw stuff.
+pub mod render;
 
 /// Everything to use shaders and build your own.
 pub mod shader;
@@ -36,6 +44,3 @@ pub use rusttype;
 pub use smallvec;
 pub use cgmath;
 pub use image;
-
-pub use self::canvas::*;
-pub use self::error::{SprowlError as Error};

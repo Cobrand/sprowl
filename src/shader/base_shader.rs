@@ -8,8 +8,6 @@ use std::{
     os::raw::*,
 };
 
-
-
 /// Trait defining a uniform, typically an enum.
 pub trait Uniform: std::fmt::Debug + Clone + Copy + std::hash::Hash + PartialEq + Eq {
     fn name(&self) -> &str;
@@ -41,7 +39,8 @@ impl ShaderBuildStep {
 }
 
 impl<U: Uniform> BaseShader<U> {
-
+    /// Init a uniform location. If you forget to do this for some uniform, your
+    /// program will crash at runtime (opengl compile time)
     pub fn init_uniform_location(&mut self, uniform: U) {
         let name = CString::new(uniform.name()).unwrap();
         let uniform_location = unsafe {gl::GetUniformLocation(self.id, name.as_ptr())};
@@ -131,6 +130,8 @@ impl<U: Uniform> BaseShader<U> {
         }
     }
 
+    /// Create a base fragment shader from a fragment source as raw text (not a path), and a base
+    /// vertex shader as raw text as well.
     pub fn new(fragment_source: &str, vertex_source: &str) -> Result<BaseShader<U>, ShaderLoadError> {
         unsafe {
             let vertex_shader_id = gl::CreateShader(gl::VERTEX_SHADER);

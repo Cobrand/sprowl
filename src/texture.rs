@@ -7,7 +7,7 @@ use std::os::raw::*;
 /// Should be created via the Canvas, and rarely used manually.
 #[derive(Debug)]
 pub struct Texture2D {
-    id: GLuint,
+    pub (crate) id: GLuint,
     width: GLuint,
     height: GLuint,
 }
@@ -138,7 +138,7 @@ impl PartialEq for Texture2D {
 /// A reference to a texture, can be copied and dropped freely without affecting the original texture.
 #[derive(Debug, Copy, Clone)]
 pub struct Texture2DRef {
-    id: GLuint,
+    pub (crate) id: GLuint,
     width: GLuint,
     height: GLuint,
 }

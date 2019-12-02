@@ -1,9 +1,8 @@
 use crate::utils::{Origin, DrawPos};
 use smallvec::SmallVec;
-use crate::gelem::GraphicElement;
 use crate::canvas::Canvas;
 use crate::error::SprowlError;
-use super::render_source::RenderSource;
+use crate::render::{RenderSource, GraphicElement};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flip {
