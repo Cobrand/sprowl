@@ -553,7 +553,7 @@ impl Cache {
 
                 // divide glyphs into texture rows where a matching glyph texture
                 // already exists & glyphs where new textures must be cached
-                for ref glyph in glyphs.clone() {
+                for glyph in glyphs.clone() {
                     if glyph.pixel_bounding_box().is_none() {
                         continue;
                     }
@@ -561,7 +561,7 @@ impl Cache {
                     if let Some((row, ..)) = self.all_glyphs.get(&glyph_info) {
                         in_use_rows.insert(*row);
                     } else {
-                        uncached_glyphs.push((*glyph, glyph_info));
+                        uncached_glyphs.push((glyph, glyph_info));
                     }
                 }
 
@@ -716,7 +716,7 @@ impl Cache {
             if queue_success {
                 // single thread rasterization
                 for (tex_coords, glyph) in draw_and_upload {
-                    let pixels = draw_glyph(tex_coords, glyph, self.pad_glyphs);
+                    let pixels = draw_glyph(tex_coords, &glyph, self.pad_glyphs);
                     uploader(tex_coords, pixels.as_slice());
                 }
             }

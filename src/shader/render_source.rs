@@ -53,6 +53,6 @@ impl<'a> From<&'a Texture2D> for RenderSource {
 
 impl<'a> From<&'a Shape> for RenderSource {
     fn from(s: &'a Shape) -> RenderSource {
-        RenderSource::Shape(s.clone())
+        RenderSource::Shape(*s)
     }
 }

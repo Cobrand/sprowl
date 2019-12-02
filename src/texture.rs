@@ -19,14 +19,14 @@ pub enum TextureFormat {
 }
 
 impl TextureFormat {
-    fn to_gl_format(&self) -> gl::types::GLenum {
+    fn to_gl_format(self) -> gl::types::GLenum {
         match self {
             TextureFormat::Greyscale => gl::RED,
             TextureFormat::RGBA => gl::RGBA,
         }
     }
 
-    fn bytes(&self) -> usize {
+    fn bytes(self) -> usize {
         match self {
             TextureFormat::Greyscale => 1,
             TextureFormat::RGBA => 4,
@@ -81,8 +81,8 @@ impl Texture2D {
         }
         Texture2D {
             id: texture_id,
-            width: width,
-            height: height
+            width,
+            height
         }
     }
 

@@ -94,7 +94,7 @@ impl Canvas {
             gl::EnableVertexAttribArray(1);
         
             // attribute 0 is a vec2 of floats (for position)
-            gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 4 * size_of::<GLfloat>() as i32, 0 as *const _);
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 4 * size_of::<GLfloat>() as i32, ptr::null());
             // attribute 1 is a vec2 of float (for texture color)
             gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, 4 * size_of::<GLfloat>() as i32, ptr::null::<GLfloat>().offset(2) as *const _);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
@@ -105,7 +105,7 @@ impl Canvas {
             gl::Enable(gl::TEXTURE_2D);
             
             let mut canvas = Canvas {
-                vao: vao,
+                vao,
                 vbo,
                 current_texture_id: 0,
                 textures: Default::default(),
@@ -224,7 +224,7 @@ impl Canvas {
 
     /// Default clear color is black, just like your soul.
     pub fn clear(&mut self, clear_color: Option<Color<u8>>) {
-        let clear_color: Color<f32> = clear_color.unwrap_or(Color::<u8>::from_rgb(0, 0, 0)).to_color_f32();
+        let clear_color: Color<f32> = clear_color.unwrap_or_else(|| Color::<u8>::from_rgb(0, 0, 0)).to_color_f32();
         unsafe {
             gl::ClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f32);
             gl::Clear(gl::COLOR_BUFFER_BIT);

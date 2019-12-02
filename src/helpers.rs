@@ -41,7 +41,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
     type Item = WordPos<'t>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.chars.as_str().len() == 0 {
+        if self.chars.as_str().is_empty() {
             // we are trying to get a new word, but the string is now empty, so return None.
             return None;
         }
@@ -94,7 +94,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
             let len = self.original_str.len();
             let end = max_i + 1;
             assert!(len == end);
-            return Some(WordPos {
+            Some(WordPos {
                 word: &self.original_str[begin..end],
                 origin,
                 size: (self.start + self.offset) + Vector2::new(0.0, character_height) - origin,

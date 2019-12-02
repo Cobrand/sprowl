@@ -30,8 +30,8 @@ enum ShaderBuildStep {
 }
 
 impl ShaderBuildStep {
-    fn as_err_type(&self) -> &'static str {
-        match *self {
+    fn as_err_type(self) -> &'static str {
+        match self {
             ShaderBuildStep::CompileVertexShader => "COMPILE_VERTEX",
             ShaderBuildStep::CompileFragmentShader => "COMPILE_FRAGMENT",
             // ShaderBuildStep::CompileGeometryShader => "COMPILE_GEOMETRY",

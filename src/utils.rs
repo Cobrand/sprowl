@@ -20,8 +20,14 @@ impl Origin {
     pub fn compute_relative_origin(&self, Vector2 { x, y } : Vector2<u32>) -> Pos {
         match self {
             Origin::Center => Vector2::new((x / 2) as i32, (y / 2) as i32),
-            Origin::TopLeft(x, y) => Vector2::new(x.clone(), y.clone())
+            Origin::TopLeft(x, y) => Vector2::new(*x, *y)
         }
+    }
+}
+
+impl Default for Origin {
+    fn default() -> Origin {
+        Origin::new()
     }
 }
 
@@ -41,12 +47,14 @@ impl DrawPos {
 #[derive(Debug, Clone, Copy)]
 pub enum Shape {
     Rect(u32, u32),
+    Circle(u32),
 }
 
 impl Shape {
-    pub fn max_size(&self) -> (u32, u32) {
+    pub fn max_size(self) -> (u32, u32) {
         match self {
-            Shape::Rect(w, h) => (*w, *h),
+            Shape::Rect(w, h) => (w, h),
+            Shape::Circle(w) => (w, w),
         }
     }
 }
