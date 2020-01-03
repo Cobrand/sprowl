@@ -409,7 +409,7 @@ Suspendisse congue bibendum odio, a vulputate diam condimentum vel. Quisque vest
     let mut shader = ExampleShader::new().unwrap();
     let mut scale: f32 = 1.0;
 
-    println!("Running main loop...");
+    log::info!("Running main loop...");
     'running: for t in 0.. {
         let loading_text = match (t / 20) % 4 {
             0 => "Loading",
@@ -576,7 +576,8 @@ Suspendisse congue bibendum odio, a vulputate diam condimentum vel. Quisque vest
 }
 
 fn main() {
-    println!("Starting program");
+    env_logger::init();
+    log::info!("Starting program");
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     
@@ -606,7 +607,7 @@ fn main() {
         Canvas::new((w, h))
     };
 
-    println!("Initialized OpenGL, running...");
+    log::info!("Initialized OpenGL, running...");
 
     // now that we are initialized, run the actual program
     run(&sdl_context, &window, canvas);

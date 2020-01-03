@@ -20,6 +20,7 @@ pub mod font;
 // Utility structs and enums. 
 pub mod utils;
 mod texture;
+pub mod gl_utils;
 pub use self::texture::*;
 
 mod canvas;

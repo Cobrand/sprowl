@@ -19,6 +19,8 @@ use std::os::raw::*;
 use std::mem::{size_of, MaybeUninit};
 use std::ptr;
 
+use crate::gl_utils;
+
 #[must_use]
 type SprowlErrors = Vec<SprowlError>;
 
@@ -50,6 +52,26 @@ impl Canvas {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
         self.set_viewport();
+
+        log::info!(
+            "OpenGL Vendor: {}",
+            gl_utils::gl_get_string(gl::VENDOR).to_string_lossy(),
+        );
+        log::info!(
+            "OpenGL Renderer: {}",
+            gl_utils::gl_get_string(gl::RENDERER).to_string_lossy(),
+        );
+        log::info!(
+            "OpenGL Version: {}, GLSL Version: {}",
+            gl_utils::gl_get_string(gl::VERSION).to_string_lossy(),
+            gl_utils::gl_get_string(gl::SHADING_LANGUAGE_VERSION).to_string_lossy(),
+        );
+        log::info!("OpenGL MAX_TEXTURE_SIZE:         {}", gl_utils::gl_get_int(gl::MAX_TEXTURE_SIZE));
+        log::info!("OpenGL MAX_3D_TEXTURE_SIZE:      {}", gl_utils::gl_get_int(gl::MAX_3D_TEXTURE_SIZE));
+        log::info!("OpenGL MAX_ARRAY_TEXTURE_LAYERS: {}", gl_utils::gl_get_int(gl::MAX_ARRAY_TEXTURE_LAYERS));
+        log::info!("OpenGL MAX_ELEMENTS_VERTICES:    {}", gl_utils::gl_get_int(gl::MAX_ELEMENTS_VERTICES));
+        log::info!("OpenGL MAX_ELEMENTS_INDICES:     {}", gl_utils::gl_get_int(gl::MAX_ELEMENTS_INDICES));
+        log::info!("OpenGL MAX_VERTEX_ATTRIBS:       {}", gl_utils::gl_get_int(gl::MAX_VERTEX_ATTRIBS));
     }
 
     /// Creates a new Canvas with the given dimensions.
