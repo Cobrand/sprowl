@@ -28,6 +28,9 @@ type SprowlErrors = Vec<SprowlError>;
 ///
 /// Currently, a Canvas can hold textures and fonts, and print them dynamically.
 ///
+/// Note: All imported textures must be at most 1024x1024 in size. (TODO: Add a "HD Atlas" where
+/// textures can be of 2048x2048 or even 4096x4096)
+///
 /// You first have to register textures via the `add_*` methods here,
 /// A Canvas doesn't do anything by itself, it MUST be linked to an OpenGL context;
 /// see the sdl2-simple example.

@@ -2,6 +2,144 @@ use gl;
 use gl::types::*;
 use std::os::raw::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Texture2DArrayRef {
+    pub (crate) tex_id: GLuint,
+    pub (crate) layer: GLuint,
+}
+
+#[derive(Debug)]
+pub struct Texture2DArray {
+    pub (crate) format: TextureFormat,
+    pub (crate) id: GLuint,
+    pub (crate) max_layers: GLuint,
+    pub (crate) max_width: GLuint,
+    pub (crate) max_height: GLuint,
+    // stores the dimension of every texture.
+    pub (crate) stats: Vec<(GLuint, GLuint)>,
+}
+
+/// Represents an array of RGBA textures.
+impl Texture2DArray {
+    fn gen_texture() -> GLuint {
+        let mut id = std::mem::MaybeUninit::uninit();
+        unsafe {
+            gl::GenTextures(1, id.as_mut_ptr());
+            id.assume_init()
+        }
+    }
+
+    /// Returns the number of bytes to offset whenever we want to access the index `index`.
+    fn offset(&self, index: u32) -> GLuint {
+        index * (self.max_width * self.max_height)
+    }
+
+    pub fn new(width: GLuint, height: GLuint, max_layers: GLuint) -> Texture2DArray {
+        let id = Self::gen_texture();
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D_ARRAY, id);
+            // allocate the storage for the texture array
+            gl::TexImage2D(
+                gl::TEXTURE_2D_ARRAY,
+                // only use 1 level for the mipmap (so value=0)
+                0,
+                gl::RGBA as GLint,
+                width as GLint,
+                height as GLint,
+                // border must always be 0
+                0,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                // fill with void
+                std::ptr::null()
+            );
+
+            gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as GLint);
+        }
+        Texture2DArray {
+            id,
+            max_layers,
+            max_width: width,
+            max_height: height,
+            stats: Vec::with_capacity(32),
+            format: TextureFormat::RGBA,
+        }
+    }
+
+    pub fn bind(&self) {
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.id);
+        }
+    }
+
+    pub fn unbind(&self) {
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D_ARRAY, 0);
+        }
+    }
+
+    pub fn add_texture(&mut self, bytes: &[u8], width: GLuint, height: GLuint) -> Texture2DArrayRef {
+        debug_assert!(bytes.len() >= width as usize * height as usize * self.format.bytes());
+
+        let next_layer = self.stats.len() as GLint;
+
+        self.bind();
+        unsafe {
+            gl::TexSubImage3D(
+                gl::TEXTURE_2D_ARRAY,
+                0, // mipmap 0
+                0, // xoffset = 0
+                0, // yoffset = 0
+                next_layer, // layer to update (create)
+                width as GLint,
+                height as GLint,
+                1, // only one depth to update
+                self.format.to_gl_format(),
+                gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void
+            );
+        }
+        self.unbind();
+
+        self.stats.push((width, height));
+
+        Texture2DArrayRef {
+            layer: next_layer as GLuint,
+            tex_id: self.id,
+        }
+    }
+
+    pub fn update_texture(&mut self, tex_ref: &Texture2DArrayRef, bytes: &[u8], xoffset: GLint, yoffset: GLint, width: GLuint, height: GLuint) {
+        assert_eq!(tex_ref.tex_id, self.id, "texture arrays ids are not the same: trying to update a texture to the wrong array");
+        self.bind();
+        unsafe {
+            gl::TexSubImage3D(
+                gl::TEXTURE_2D_ARRAY,
+                0, // mipmap 0
+                xoffset, // xoffset = 0
+                yoffset, // yoffset = 0
+                tex_ref.layer as GLint, // layer to update (create)
+                width as GLint,
+                height as GLint,
+                1, // only one depth to update
+                self.format.to_gl_format(),
+                gl::UNSIGNED_BYTE, bytes.as_ptr() as *const c_void
+            );
+        }
+        self.unbind();
+    }
+}
+
+impl Drop for Texture2DArray {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteTextures(1, &self.id)
+        }
+    }
+}
+
 /// Represents an OpenGL 2D Texture.
 ///
 /// Should be created via the Canvas, and rarely used manually.
