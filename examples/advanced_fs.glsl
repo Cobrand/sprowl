@@ -28,8 +28,12 @@ vec4 blend(vec4 src, vec4 dst) {
 vec4 true_tex_color(sampler2D img, vec2 pos) {
     vec4 color = texture(img, pos);
     if (is_grayscale == uint(1)) {
-        color.a = color.r;
-        color.rgb = vec3(1.0);
+        color = vec4(
+            1.0,
+            1.0,
+            1.0,
+            color.r
+        );
     }
     return color;
 }
@@ -55,11 +59,14 @@ void main()
         // glowing effect
         const vec3 base_color = vec3(ivec3(247, 118, 34)) / 255.0;
         const vec3 half_base_color = base_color / 2.0;
-        color.rgb = half_base_color * vec3(
-            cos(- 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y) * cos(t / 10.0),
-            cos( 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y),
-            cos( 10.0 * TexCoords.x) * sin(- 10.0 * TexCoords.y)
-        ) + half_base_color;
+        color = vec4(
+            half_base_color * vec3(
+                cos(- 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y) * cos(t / 10.0),
+                cos( 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y),
+                cos( 10.0 * TexCoords.x) * sin(- 10.0 * TexCoords.y)
+            ) + half_base_color,
+            1.0
+        );
         return;
     }
     if (effect == uint(2)) {
