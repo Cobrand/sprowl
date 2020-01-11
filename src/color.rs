@@ -53,6 +53,14 @@ impl<T: ColorType> Color<T> {
     pub fn black() -> Color<T> {
         Color {r: T::COLOR_MIN_VALUE, g: T::COLOR_MIN_VALUE, b: T::COLOR_MIN_VALUE, a: T::COLOR_MAX_VALUE}
     }
+
+    pub fn to_vec3(self) -> cgmath::Vector3<T> {
+        cgmath::Vector3::new(self.r, self.g, self.b)
+    }
+
+    pub fn to_vec4(self) -> cgmath::Vector4<T> {
+        cgmath::Vector4::new(self.r, self.g, self.b, self.a)
+    }
 }
 
 impl Color<u8> {

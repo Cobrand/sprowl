@@ -2,422 +2,299 @@ use sdl2::keyboard::Keycode;
 use sdl2::event::{Event, WindowEvent};
 use sprowl::{
     cgmath::{Matrix4, Vector2, Vector3, Vector4},
-    smallvec::SmallVec,
-    Error as SprowlError,
     Color,
-    Canvas,
-    font::{FontStemDrawCall, AdvancedLayoutIter, WordPos},
-    render::{RenderStem, GraphicElement, RenderSource},
-    shader::{BaseShader, Shader, Scaling, ShaderDrawCall, CommonShaderDrawParams, self},
-    utils::{Shape, Origin, DrawPos},
+    shader::{Shader, Uniform},
+    renderer::{Renderer, RendererBuilder, AsVertexData},
+    render_storage::{RenderStorage, texture::TextureArrayLayer, font::{AdvancedLayoutIter, WordPos, FontStemDrawCall}, TextureKind, FontId},
 };
-
-use std::cmp::{max, min};
+use std::mem::transmute;
+use std::cmp::min;
 
 static FRAGMENT_SHADER_SOURCE: &'static str = include_str!("advanced_fs.glsl");
 static VERTEX_SHADER_SOURCE: &'static str = include_str!("advanced_vs.glsl");
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum ExampleUniformName {
-    View,
-    Model,
-    Texture0,
-    Texture1,
-    OutlineColor,
-    OutlineThickness,
-    Effect,
-    EffectColor,
-    IsGrayscale,
-    T,
+#[derive(Debug)]
+pub enum GraphicElement {
+    Rect(GraphicRect),
+    Texture(GraphicTexture),
+    Text(GraphicText),
 }
 
-impl shader::Uniform for ExampleUniformName {
-    fn name(&self) -> &str {
-        use ExampleUniformName::*;
+static LOREM_IPSUM: &'static str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Fusce quis luctus leo, eget ultricies nisi. Phasellus gravida consequat viverra. Nam rhoncus euismod lectus id dictum. Sed finibus consequat orci a fermentum. Integer neque nulla, malesuada nec diam sed, eleifend tristique ante. Sed a hendrerit dui. Fusce tristique ante at feugiat venenatis. Phasellus molestie nulla vel arcu ultrices, quis bibendum metus lacinia. Etiam id iaculis purus. Etiam erat odio, pulvinar faucibus vulputate in, aliquam eu tellus. Duis placerat orci quis augue lacinia, dictum commodo magna fermentum.\n\n\
+Maecenas a mollis quam. Ut vitae ligula ultricies, condimentum risus nec, vestibulum tellus. Aliquam lobortis velit in lorem molestie varius. Mauris in massa in nisl volutpat dignissim. Ut ex mi, pulvinar vel bibendum eu, porta ac metus. Suspendisse enim massa, tempus in facilisis sit amet, varius sollicitudin justo. Fusce tristique sollicitudin dui ac varius. Suspendisse sagittis lacus eu metus ultrices, vitae ornare urna lacinia. Fusce accumsan aliquam hendrerit. Nam fringilla metus condimentum, venenatis leo et, placerat ipsum. Maecenas enim arcu, facilisis et ultrices eget, ornare eget dui.\n\n\
+Praesent condimentum enim quam, eget tincidunt massa rhoncus sed. Phasellus luctus aliquet magna, id pretium ipsum euismod eu. Nulla odio neque, porttitor ac felis eu, pellentesque sagittis eros. Cras scelerisque consequat ipsum, ut euismod diam rhoncus et. Aliquam erat volutpat. Praesent ornare vulputate nisi, et egestas quam aliquet sagittis. Morbi lorem libero, tincidunt eu semper ut, suscipit non urna. Morbi sodales elementum nunc at dapibus. Nullam nec lacus non urna tristique malesuada et eu tortor. Aenean tristique libero sed erat pellentesque, ac luctus nisi lacinia. Aliquam sit amet faucibus urna, eget efficitur tortor. Sed molestie tristique erat, quis condimentum felis.";
+
+impl GraphicElement {
+    pub fn draw_to_renderer(self, renderer: &mut Renderer<ExampleUniform>, render_storage: &mut RenderStorage) {
         match self {
-            View => "view",
-            Model => "model",
-            OutlineColor => "outline_color",
-            Texture0 => "texture0",
-            Texture1 => "texture1",
-            OutlineThickness => "outline_thickness",
-            EffectColor => "effect_color",
-            Effect => "effect",
-            IsGrayscale => "is_grayscale",
-            T => "t",
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum Effect {
-    None,
-    Glowing(Color<u8>),
-    Solid(Color<u8>),
-    TextWave(Color<u8>),
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum TextAlign {
-    Left,
-    Right,
-    Center,
-}
-
-impl TextAlign {
-    /// diff is the difference between the bounding box and the actual content bounding box.
-    pub fn offset(&self, diff: u32) -> u32 {
-        match self {
-            TextAlign::Center => diff / 2,
-            TextAlign::Right => diff,
-            TextAlign::Left => 0
-        }
-    }
-}
-
-impl Default for TextAlign {
-    fn default() -> TextAlign {
-        TextAlign::Left
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum VerticalAlign {
-    Top,
-    Center,
-    Bottom,
-}
-
-impl VerticalAlign {
-    /// diff is the difference between the bounding box and the actual content bounding box.
-    pub fn offset(&self, diff: u32) -> u32 {
-        match self {
-            VerticalAlign::Center => diff / 2,
-            VerticalAlign::Top => 0,
-            VerticalAlign::Bottom => diff,
-        }
-    }
-}
-
-impl Default for VerticalAlign {
-    fn default() -> VerticalAlign {
-        VerticalAlign::Center
-    }
-}
-
-impl Default for Effect {
-    fn default() -> Effect {
-        Effect::None
-    }
-}
-
-impl Effect {
-    pub fn as_draw_params(&self) -> (u32, Color<u8>) {
-        match *self {
-            Effect::None => (0, Color::from_rgba(0,0,0,0)),
-            Effect::Glowing(c) => (1, c),
-            Effect::Solid(c) => (2, c),
-            Effect::TextWave(c) => (3, c),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct ExampleRenderParams {
-    pub draw_pos: DrawPos,
-    pub crop: Option<(i32, i32, u32, u32)>,
-    pub rotate: Option<(f32, Origin)>,
-    pub scale: Option<f32>,
-    pub outline: Option<Color<u8>>,
-    pub effect: Effect,
-    /// id of the 2nd texture to bind
-    pub second_bind: Option<u32>,
-    /// bounding_box, text_align, vertical_align
-    pub text_params: Option<(Vector2<u32>, TextAlign, VerticalAlign)>,
-    pub t: f32,
-}
-
-impl ExampleRenderParams {
-    pub fn new(pos: Vector2<i32>, origin: Origin) -> ExampleRenderParams {
-        ExampleRenderParams {
-            draw_pos: DrawPos { pos, origin },
-            crop: Default::default(),
-            rotate: Default::default(),
-            scale: Default::default(),
-            outline: Default::default(),
-            effect: Default::default(),
-            second_bind: Default::default(),
-            text_params: Default::default(),
-            t: 0.0,
-        }
-    }
-}
-
-pub struct ExampleDrawCall {
-    pub source: RenderSource,
-    pub common: CommonShaderDrawParams,
-    pub outline: Option<Color<u8>>,
-    pub effect: u32,
-    pub effect_color: Color<u8>,
-    pub t: f32,
-}
-
-pub struct ExampleShader {
-    shader: BaseShader<ExampleUniformName>, 
-    zoom_level: f32,
-}
-
-impl ExampleShader {
-    pub fn new() -> Result<ExampleShader, shader::ShaderLoadError> {
-        let basic_shader = BaseShader::new(FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE)?;
-        let mut advanced_shader = ExampleShader { shader: basic_shader, zoom_level: 1.0 };
-        advanced_shader.init_all_uniform_locations();
-        Ok(advanced_shader)
-    }
-}
-
-impl AsRef<BaseShader<ExampleUniformName>> for ExampleShader {
-    fn as_ref(&self) -> &BaseShader<ExampleUniformName> {
-        &self.shader
-    }
-}
-
-impl AsMut<BaseShader<ExampleUniformName>> for ExampleShader {
-    fn as_mut(&mut self) -> &mut BaseShader<ExampleUniformName> {
-        &mut self.shader
-    }
-}
-
-impl Shader for ExampleShader {
-    type D = ExampleDrawCall;
-    type U = ExampleUniformName;
-
-    fn apply_draw_uniforms(&mut self, draw_call: Self::D) {
-        use ExampleUniformName as UniName;
-
-        let (width, height) = draw_call.render_source().size();
-        let (scale_x, scale_y) = draw_call.common.scaling.compute_scale(width, height);
-        let DrawPos {origin, pos} = draw_call.common.draw_pos;
-        let (crop_offset_x, crop_offset_y, sprite_w, sprite_h) = draw_call.common.crop.unwrap_or((0, 0, width, height));
-        let Vector2 { x: translate_origin_x, y: translate_origin_y } = origin.compute_relative_origin(Vector2::new(sprite_w, sprite_h));
-        let mut model = Matrix4::from_nonuniform_scale((width as f32) * scale_x, (height as f32) * scale_y, 1.0);
-
-        if let Some((angle, origin)) = draw_call.common.rotate {
-            let Vector2 {x: pivot_x, y: pivot_y } = origin.compute_relative_origin(Vector2::new(sprite_w, sprite_h));
-            let (pivot_x, pivot_y) = (pivot_x + crop_offset_x, pivot_y + crop_offset_y);
-            model =
-                // rotate around pivot center:
-                // translate by (-width/2, -height/2)
-                // then rotate,
-                // then re-translate by (width/2, height/2)
-                // YES this is the correct order, matrices multiplications should be read
-                // from right to left!
-                Matrix4::from_translation(Vector3::new(pivot_x as f32 * scale_x, pivot_y as f32 * scale_y, 0.0))
-                * Matrix4::from_angle_z(cgmath::Deg(angle))
-                * Matrix4::from_translation(Vector3::new(-pivot_x as f32 * scale_x, -pivot_y as f32 * scale_y, 0.0))
-                * model
-        }
-
-        model = Matrix4::from_translation(Vector3::<f32>::new(
-            pos.x as f32 - (translate_origin_x + crop_offset_x) as f32 * scale_x,
-            pos.y as f32 - (translate_origin_y + crop_offset_y) as f32 * scale_y,
-            0.0
-        )) * model;
-
-        let thickness_pixels = 1.0;
-        self.shader.set_vector2(UniName::OutlineThickness, &Vector2::from((thickness_pixels / width as f32 / scale_x, thickness_pixels / height as f32 / scale_y)));
-        if let Some(outline_color) = draw_call.outline {
-            let color = Vector4::from(outline_color.to_color_f32().rgba());
-            self.shader.set_vector4(UniName::OutlineColor, &color);
-        } else {
-            self.shader.set_vector4(UniName::OutlineColor, &Vector4::from((0f32, 0f32, 0f32, 0f32)));
-        }
-        self.shader.set_uint(UniName::Effect, draw_call.effect);
-        self.shader.set_vector4(UniName::EffectColor, &Vector4::from(draw_call.effect_color.to_color_f32().rgba()));
-        self.shader.set_float(UniName::T, draw_call.t);
-        self.shader.set_uint(UniName::IsGrayscale, if draw_call.common.is_source_grayscale { 1 } else { 0 });
-        self.shader.set_matrix4(UniName::Model, &model);
-    }
-
-    fn apply_global_uniforms(&mut self, (window_width, window_height): (u32, u32)) {
-        self.shader.set_int(ExampleUniformName::Texture0, 0);
-        self.shader.set_int(ExampleUniformName::Texture1, 1);
-
-        let view_matrix = Matrix4::<f32>::from(cgmath::Ortho {
-            left: 0.0,
-            right: (window_width as f32) / self.zoom_level,
-            bottom: (window_height as f32) / self.zoom_level,
-            top: 0.0,
-            near: -1.0,
-            far: 1.0
-        });
-        self.shader.set_matrix4(ExampleUniformName::View, &view_matrix);
-    }
-
-    fn as_base_shader(&mut self) -> &mut BaseShader<Self::U> {
-        &mut self.shader
-    }
-
-    fn init_all_uniform_locations(&mut self) {
-        use ExampleUniformName::*;
-        self.shader.init_uniform_location(Model);
-        self.shader.init_uniform_location(View);
-        self.shader.init_uniform_location(Texture0);
-        self.shader.init_uniform_location(Texture1);
-        self.shader.init_uniform_location(OutlineColor);
-        self.shader.init_uniform_location(OutlineThickness);
-        self.shader.init_uniform_location(Effect);
-        self.shader.init_uniform_location(EffectColor);
-        self.shader.init_uniform_location(T);
-        self.shader.init_uniform_location(IsGrayscale);
-    }
-}
-
-impl ShaderDrawCall for ExampleDrawCall {
-    type RenderParams = ExampleRenderParams;
-
-    fn render_source(&self) -> RenderSource {
-        self.source
-    }
-
-    fn common_params(&self) -> &CommonShaderDrawParams {
-        &self.common
-    }
-
-    fn from_graphic_elem<S: AsRef<str>>(
-        graphic_elem: &GraphicElement<S, Self::RenderParams>,
-        canvas: &mut Canvas
-    ) -> Result<SmallVec<[Self; 2]>, SprowlError> {
-        let mut results = SmallVec::new();
-
-        let render_stem: &RenderStem<_> = &graphic_elem.render_stem;
-        let render_params: &ExampleRenderParams = &graphic_elem.render_params;
-
-        if let Some(tid) = render_params.second_bind {
-            if let Some(t) = canvas.get_texture(tid) {
-                t.bind(1);
-            }
-        }
-
-        let (effect, effect_color) = render_params.effect.as_draw_params();
-
-        match render_stem {
-            RenderStem::Texture { id: texture_id } => {
-                let texture = canvas.get_texture(*texture_id).ok_or(SprowlError::MissingTextureId(*texture_id))?;
-                let mut common: CommonShaderDrawParams = CommonShaderDrawParams::new(render_params.draw_pos);
-                common.crop = render_params.crop;
-                common.rotate = render_params.rotate;
-                common.scaling = render_params.scale.map(|s| Scaling::new(s)).unwrap_or(Scaling::None);
-                let draw_call: ExampleDrawCall = ExampleDrawCall {
-                    source: RenderSource::from(texture),
-                    common,
-                    outline: render_params.outline,
-                    effect,
-                    effect_color,
-                    t: render_params.t,
-                };
-                results.push(draw_call);
+            GraphicElement::Rect(r) => {
+                renderer.add_elem(&VertexData {
+                    position: Vector2::new(r.x as f32, r.y as f32),
+                    size: Vector2::new(r.width as f32, r.height as f32),
+                    rot_pivot: Vector2::new(r.width as f32 / 2.0, r.height as f32 / 2.0),
+                    rot: r.rot,
+                    crop: None,
+                    kind: 2,
+                    effect: 0,
+                    layer: 0,
+                    secondary_texture_layer: 0,
+                    effect_color: r.color.to_color_f32().to_vec3(),
+                })
             },
-            RenderStem::Shape { shape } => {
-                let mut common: CommonShaderDrawParams = CommonShaderDrawParams::new(render_params.draw_pos);
-                common.crop = render_params.crop;
-                common.rotate = render_params.rotate;
-                common.scaling = render_params.scale.map(|s| Scaling::new(s)).unwrap_or(Scaling::None);
-                let draw_call: ExampleDrawCall = ExampleDrawCall {
-                    source: RenderSource::from(shape),
-                    common,
-                    outline: render_params.outline,
-                    effect,
-                    effect_color,
-                    t: render_params.t,
+            GraphicElement::Texture(t) => {
+                let stats = render_storage.get_stats(t.texture);
+                let (width, height) = match t.crop {
+                    Some((_, _, w, h,)) => (w, h),
+                    None => (stats.width, stats.height),
                 };
-                results.push(draw_call);
-            },
-            RenderStem::Text { font_id, font_size, text } => {
-                // necessary to avoid code duplication and make the borrow checker happy.
-                let stem_to_real_draw_call = |character_stem_call: FontStemDrawCall<'_>| -> ExampleDrawCall {
-                    let mut common = CommonShaderDrawParams::new(DrawPos::new(character_stem_call.dest_origin));
-                    common.crop = Some(character_stem_call.source_crop);
-                    common.is_source_grayscale = true;
-                    common.pad = Some(1);
-                    ExampleDrawCall {
-                        source: RenderSource::from(character_stem_call.texture),
-                        common,
-                        outline: render_params.outline,
-                        effect,
-                        effect_color,
-                        t: render_params.t
+                let (max_w, max_h) = render_storage.get_max_dims(TextureKind::RGBA);
+                let crop = match t.crop {
+                    Some((x, y, w, h)) => {
+                        (
+                            x as f32 / max_w as f32,
+                            y as f32 / max_h as f32,
+                            w as f32 / max_w as f32,
+                            h as f32 / max_h as f32,
+                        )
+                    },
+                    None => {
+                        (
+                            0.0,
+                            0.0,
+                            width as f32 / max_w as f32,
+                            height as f32 / max_h as f32,
+                        )
                     }
                 };
-                let font_renderer = canvas.get_font_mut(*font_id).ok_or(SprowlError::MissingTextureId(*font_id))?;
-                if let Some(text_params) = render_params.text_params {
-                    let topleft = render_params.draw_pos.pos - render_params.draw_pos.origin.compute_relative_origin(text_params.0);
-                    let font_layout = AdvancedLayoutIter::new(font_renderer.font(), text.as_ref(), *font_size, Vector2::new(0.0, 0.0), text_params.0.x).collect::<Vec<_>>();
-                    let actual_bb = font_layout
-                        .iter()
-                        .fold((0, 0), |(old_x, old_y), word| (
-                            max(old_x as u32, word.origin.x as u32 + word.size.x as u32),
-                            max(old_y as u32, word.origin.y as u32 + word.size.y as u32)
-                        ));
-                    let mut actual_bb = Vector2::new(actual_bb.0, actual_bb.1);
-                    assert!(actual_bb.x <= text_params.0.x);
-                    // this is to avoid an operator overflow, if the font_size is higher than the
-                    // boudning box, we won't get an error.
-                    actual_bb.y = min(actual_bb.y, text_params.0.y);
-                    let diff = text_params.0 - actual_bb;
-                    let offset = Vector2::new(text_params.1.offset(diff.x), text_params.2.offset(diff.y));
-                    for WordPos { word, origin, .. } in font_layout {
-                        let actual_pos = topleft + offset.cast::<i32>().unwrap() + origin.cast::<i32>().unwrap();
-                        let characters = font_renderer.word_to_draw_call(word, *font_size, actual_pos);
-                        results.reserve(characters.len());
-                        for character in characters {
-                            let draw_call = stem_to_real_draw_call(character);
-                            results.push(draw_call);
+                renderer.add_elem(&VertexData {
+                    position: Vector2::new(t.x as f32, t.y as f32),
+                    size: Vector2::new(width as f32, height as f32),
+                    rot_pivot: Vector2::new(width as f32 / 2.0, height as f32 / 2.0),
+                    rot: t.rot,
+                    crop: Some(crop),
+                    kind: 0,
+                    effect: 0,
+                    layer: t.texture,
+                    secondary_texture_layer: 0,
+                    effect_color: Color::<f32>::black().to_vec3(),
+                })
+            },
+            GraphicElement::Text(t) => {
+                let (max_w, max_h) = render_storage.get_max_dims(TextureKind::Grayscale);
+                let (font, mut texture) = render_storage.get_font_with_texture(t.font).unwrap();
+                match t.width {
+                    Some(max_width) => {
+                        let font_layout = AdvancedLayoutIter::new(
+                            font.font(),
+                            &t.text,
+                            t.font_size,
+                            Vector2::new(t.x as f32, t.y as f32),
+                            max_width
+                        ).collect::<Vec<WordPos<'_>>>();
+                        for WordPos { word, origin, .. } in font_layout {
+                            let word_layout = font.word_to_draw_call(
+                                &mut texture, word, t.font_size, origin.cast::<i32>().unwrap()
+                            );
+                            render_word(renderer, &word_layout, (max_w, max_h));
                         };
-                    };
-                } else {
-                    let characters = font_renderer.word_to_draw_call(text.as_ref(), *font_size, render_params.draw_pos.pos);
-                    results.reserve(characters.len());
-                    for character in characters {
-                        let draw_call = stem_to_real_draw_call(character);
-                        results.push(draw_call);
-                    };
+                    },
+                    None => {
+                        let word_layout = font.word_to_draw_call(
+                            &mut texture, &t.text, t.font_size, Vector2::new(t.x, t.y)
+                        );
+                        render_word(renderer, &word_layout, (max_w, max_h));
+                    }
                 };
-            }
+            },
         }
-
-        Ok(results)
     }
 }
 
-fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window, mut canvas: Canvas) {
-    // add the resouces
-    let stick_id = canvas.add_texture_from_image_path("res/stick.png").unwrap();
-    let characters_id = canvas.add_texture_from_image_path("res/characters.png").unwrap();
-    let shapes_id = canvas.add_texture_from_image_path("res/shapes.png").unwrap();
-    let noise_id = canvas.add_texture_from_image_path("res/noise.png").unwrap();
+pub fn render_word(renderer: &mut Renderer<ExampleUniform>, word_layout: &[FontStemDrawCall], texture_layer_dims: (u32, u32)) {
+    let (max_w, max_h) = texture_layer_dims;
+    for character in word_layout {
+        let (w, h) = (character.source_crop.2, character.source_crop.3);
+        let crop = Some((
+            // 1 represents the padding for borders: we need the characters to be 1 pixel wider
+            // to be able to show an outline.
+            (character.source_crop.0 - 1) as f32 / max_w as f32,
+            (character.source_crop.1 - 1) as f32 / max_h as f32,
+            (character.source_crop.2 + 2) as f32 / max_w as f32,
+            (character.source_crop.3 + 2) as f32 / max_h as f32,
+        ));
+        renderer.add_elem(&VertexData {
+            position: Vector2::new((character.dest_origin.x - 1) as f32, (character.dest_origin.y - 1) as f32),
+            size: Vector2::new((w + 2) as f32, (h + 2) as f32),
+            rot_pivot: Vector2::new((w + 2) as f32 / 2.0, (h + 2) as f32 / 2.0),
+            rot: 0.0,
+            crop,
+            kind: 1,
+            effect: 8,
+            layer: 0,
+            secondary_texture_layer: 3, // "noise_id" layer in theory, but you shouldnt hardcode it...
+            effect_color: Color::white().to_vec3(),
+        });
+    }
+}
 
-    // font must always be from static resources, so use the include_bytes! macro.
-    let font_id = canvas.add_font_from_bytes(include_bytes!("../res/DejaVuSerif.ttf"));
+#[derive(Debug)]
+pub struct GraphicRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub rot: f32,
+    pub color: Color<u8>,
+}
+
+#[derive(Debug)]
+pub struct GraphicTexture {
+    pub crop: Option<(i32, i32, u32, u32)>,
+    pub x: i32,
+    pub y: i32,
+    pub rot: f32,
+    pub texture: TextureArrayLayer,
+    pub scale: Option<(f32, f32)>,
+}
+
+#[derive(Debug)]
+pub struct GraphicText {
+    pub x: i32,
+    pub y: i32,
+    pub width: Option<u32>,
+    pub text: String,
+    pub font_size: f32,
+    pub font: FontId,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct VertexData {
+    crop: Option<(f32, f32, f32, f32)>,
+    position: Vector2<f32>,
+    size: Vector2<f32>,
+    rot_pivot: Vector2<f32>,
+    rot: f32,
+    // first 8 bits ( ^ 0b1111111 ) => 0 = texture, 1 = text, 2 = rect
+    //
+    // then there are flags available for all other bits.
+    kind: u32,
+    layer: u32,
+    secondary_texture_layer: u32,
+    effect: u32,
+    effect_color: Vector3<f32>,
+}
+
+impl AsVertexData for VertexData {
+    fn add_vertex_data(&self, instanced_vb: &mut Vec<u8>) -> u32 {
+        let crop = self.crop.map(|(x, y, w, h)| {
+            Vector4::new(x, y, w, h)
+        }).unwrap_or(Vector4::new(0.0, 0.0, 1.0, 1.0));
+        unsafe {
+            let b_crop = &transmute::<Vector4<f32>, [u8; 16]>(crop);
+            instanced_vb.extend_from_slice(b_crop);
+
+            let b_position = &transmute::<Vector2<f32>, [u8; 8]>(self.position);
+            instanced_vb.extend_from_slice(b_position);
+
+            let b_size = &transmute::<Vector2<f32>, [u8; 8]>(self.size);
+            instanced_vb.extend_from_slice(b_size);
+
+            let b_rot_pivot = &transmute::<Vector2<f32>, [u8; 8]>(self.rot_pivot);
+            instanced_vb.extend_from_slice(b_rot_pivot);
+
+            let b_rot = &transmute::<f32, [u8; 4]>(self.rot);
+            instanced_vb.extend_from_slice(b_rot);
+
+            let b_others = &transmute::<[u32; 4], [u8; 16]>(
+                [self.kind, self.layer, self.secondary_texture_layer, self.effect]
+            );
+            instanced_vb.extend_from_slice(b_others);
+
+            let b_effect_color = &transmute::<Vector3<f32>, [u8; 12]>(
+                self.effect_color
+            );
+            instanced_vb.extend_from_slice(b_effect_color)
+        }
+
+        1
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum ExampleUniform {
+    View,
+    T
+}
+
+impl Uniform for ExampleUniform {
+    fn name(&self) -> &str {
+        match self {
+            ExampleUniform::View => "view",
+            ExampleUniform::T => "t",
+        }
+    }
+
+    fn for_each<F: FnMut(Self)>(mut f: F) {
+        f(ExampleUniform::View);
+        f(ExampleUniform::T);
+    }
+}
+
+fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window) {
+    let mut frames = 0u32;
+    let mut compute_us = 0;
+    let mut draw_us = 0;
+    let mut swap_us = 0;
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let mut entity_x: i32 = 500;
-    let mut entity_y: i32 = 500;
+    if let Some(x) = sprowl::gl_utils::gl_get_error() {
+        panic!("gl error code after initializing: {}", x);
+    }
 
-    static LOREM_IPSUM: &str = "AV.    Wa.     Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\
-Suspendisse congue bibendum odio, a vulputate diam condimentum vel. Quisque vestibulum tristique odio, ut faucibus mi gravida vel.";
-    let mut shader = ExampleShader::new().unwrap();
-    let mut scale: f32 = 1.0;
+    let lorem_ipsum_length = LOREM_IPSUM.chars().count();
+
+    let shader = Shader::<ExampleUniform>::new(
+        FRAGMENT_SHADER_SOURCE,
+        VERTEX_SHADER_SOURCE,
+        &["texture_rgba", "texture_gray"]
+    ).expect("error when creating shader");
+    let mut renderer = RendererBuilder::new(16384)
+        // layout = 1 -> vec4 crop 
+        .with_instanced_vertex_attrib(4, gl::FLOAT)
+        // vec2 translation
+        .with_instanced_vertex_attrib(2, gl::FLOAT)
+        // vec2 scale
+        .with_instanced_vertex_attrib(2, gl::FLOAT)
+        // vec2 rot_pivot
+        .with_instanced_vertex_attrib(2, gl::FLOAT)
+        // rot
+        .with_instanced_vertex_attrib(1, gl::FLOAT)
+        .with_instanced_vertex_attrib(1, gl::UNSIGNED_INT)
+        .with_instanced_vertex_attrib(1, gl::UNSIGNED_INT)
+        .with_instanced_vertex_attrib(1, gl::UNSIGNED_INT)
+        .with_instanced_vertex_attrib(1, gl::UNSIGNED_INT)
+        .with_instanced_vertex_attrib(3, gl::FLOAT)
+        .build_with(shader);
+
+    let mut render_storage = RenderStorage::new();
+
+    // add the resouces
+    let stick_id = render_storage.add_texture_from_image_bytes(include_bytes!("../res/stick.png"), None).unwrap();
+    let characters_id = render_storage.add_texture_from_image_bytes(include_bytes!("../res/characters.png"), None).unwrap();
+    let shapes_id = render_storage.add_texture_from_image_bytes(include_bytes!("../res/shapes.png"), None).unwrap();
+    let _noise_id = render_storage.add_texture_from_image_bytes(include_bytes!("../res/noise.png"), None).unwrap();
+
+    // font must always be from static resources, so use the include_bytes! macro.
+    let font_id = render_storage.add_font_from_bytes(include_bytes!("../res/DejaVuSerif.ttf"));
+
+    let mut current_size = window.drawable_size();
 
     log::info!("Running main loop...");
+    let mut last_time = std::time::Instant::now();
     'running: for t in 0.. {
-        let loading_text = match (t / 20) % 4 {
-            0 => "Loading",
-            1 => "Loading.",
-            2 => "Loading..",
-            _ => "Loading...",
-        };
-
+        if let Some(e) = sprowl::gl_utils::gl_get_error() {
+            panic!("opengl fatal error {}", e);
+        }
         let t0 = ::std::time::Instant::now();
         for event in event_pump.poll_iter() {
             match event {
@@ -427,151 +304,72 @@ Suspendisse congue bibendum odio, a vulputate diam condimentum vel. Quisque vest
                 Event::Window { win_event: WindowEvent::SizeChanged(w, h), ..} => {
                     debug_assert!(w >= 0);
                     debug_assert!(h >= 0);
-                    canvas.set_size((w as u32, h as u32));
-                },
-                Event::KeyDown { keycode: Some(Keycode::KpPlus), repeat: false, ..} => {
-                    scale *= 2.0;
-                },
-                Event::KeyDown { keycode: Some(Keycode::KpMinus), repeat: false, ..} => {
-                    scale *= 0.5;
-                },
-                Event::KeyDown { keycode: Some(Keycode::Up), repeat: false, ..} => {
-                    entity_y -= 50;
-                },
-                Event::KeyDown { keycode: Some(Keycode::Down), repeat: false, ..} => {
-                    entity_y += 50;
-                },
-                Event::KeyDown { keycode: Some(Keycode::Left), repeat: false, ..} => {
-                    entity_x -= 50;
-                },
-                Event::KeyDown { keycode: Some(Keycode::Right), repeat: false, ..} => {
-                    entity_x += 50;
+                    renderer.set_viewport(w as u32, h as u32);
+                    current_size = (w as u32, h as u32);
                 },
                 _ => {}
             }
         }
-        shader.zoom_level = scale;
-        canvas.clear(Some(Color::from_rgb(192u8, 192, 192)));
 
-        let mut graphic_elements: Vec<GraphicElement<&'static str, ExampleRenderParams>> = vec!();
-        {
-            // various shapes with outline
-            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 0), Origin::new());
-            render_params.outline = Some(Color::from_rgb(255, 128, 0));
-            graphic_elements.push( GraphicElement {
-                render_stem: RenderStem::Texture { id: shapes_id },
-                render_params,
-            })
+        renderer.clear(Some(Color::from_rgb(192u8, 192, 192)));
+        let view_matrix = Matrix4::<f32>::from(cgmath::Ortho {
+            left: 0.0,
+            right: (current_size.0 as f32),
+            bottom: current_size.1 as f32,
+            top: 0.0,
+            near: -1.0,
+            far: 1.0
+        });
+        renderer.shader.set_matrix4(ExampleUniform::View, &view_matrix);
+        renderer.shader.set_float(ExampleUniform::T, t as f32);
+
+        for x in 0..64i32 {
+            for y in 0..64i32 {
+                let color = Color::from_rgb(255, (x * 2) as u8, (y * 5) as u8);
+                let g = GraphicElement::Rect(GraphicRect { color, x: x * 25, y: y * 25, width: 20, height: 20, rot: t as f32 * 3.0});
+                g.draw_to_renderer(&mut renderer, &mut render_storage);
+            }
         }
-        {
-            // sprite with a border
-            let mut render_params = ExampleRenderParams::new(Vector2::new(entity_x, entity_y), Origin::Center);
-            render_params.outline = Some(Color::from_rgb(255u8, 0, 255u8));
-            graphic_elements.push(
-                GraphicElement {
-                    render_stem: RenderStem::Texture { id: stick_id },
-                    render_params,
-                }
-            );
-        }
-        {
-            // regular text
-            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 0), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
-            graphic_elements.push(
-                GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text: "Some Example with no BB & border: WAVE (kerning test)\n<- newline shows this", font_size: 32.0 },
-                    render_params,
-                },
-            );
-        }
-        {
-            // centered text
-            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 40), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
-            render_params.text_params = Some((Vector2::new(1280, 40), TextAlign::Center, Default::default()));
-            graphic_elements.push(
-                GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text: "Centered text (relative towindow)", font_size: 32.0 },
-                    render_params,
-                },
-            );
-        }
-        {
-            // middle text
-            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 0), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
-            render_params.text_params = Some((Vector2::new(1280, 720), TextAlign::Center, VerticalAlign::Center));
-            graphic_elements.push(
-                GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text: loading_text, font_size: 32.0 },
-                    render_params,
-                },
-            );
-        }
-        {
-            // multiline text
-            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 400), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::from_rgb(0u8, 0u8, 0u8));
-            render_params.text_params = Some((Vector2::new(1280, 720), TextAlign::Left, VerticalAlign::Top));
-            graphic_elements.push(
-                GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text: LOREM_IPSUM, font_size: 48.0 },
-                    render_params,
-                },
-            );
-        }
-        {
-            // right-aligned text
-            let mut render_params = ExampleRenderParams::new(Vector2::new(0, 80), Origin::TopLeft(0, 0));
-            render_params.outline = Some(Color::black());
-            // render_params.effect = Effect::TextWave(Color::from_rgb(43, 96, 222));
-            render_params.effect = Effect::TextWave(Color::from_rgb(255, 255, 222));
-            render_params.second_bind = Some(noise_id);
-            render_params.t = t as f32;
-            render_params.text_params = Some((Vector2::new(1280, 40), TextAlign::Right, Default::default()));
-            graphic_elements.push(
-                GraphicElement {
-                    render_stem: RenderStem::Text { font_id, text: "Right-aligned text THING (relative to window)", font_size: 64.0 },
-                    render_params,
-                },
-            );
-        }
-        {
-            // solid shape
-            let mut render_params = ExampleRenderParams::new(Vector2::new(300, 300), Origin::Center);
-            render_params.effect = Effect::Solid(Color::from_rgb(64, 64, 64));
-            graphic_elements.push( GraphicElement {
-                render_stem: RenderStem::Shape { shape: Shape::Rect(50, 50) },
-                render_params,
-            })
-        }
-        {
-            // glowing animated rect
-            let mut render_params = ExampleRenderParams::new(Vector2::new(300, 300), Origin::Center);
-            render_params.effect = Effect::Glowing(Color::from_rgb(64, 192, 1));
-            render_params.t = t as f32 / 10.0;
-            graphic_elements.push( GraphicElement {
-                render_stem: RenderStem::Shape { shape: Shape::Rect(50, 50) },
-                render_params,
-            })
-        }
-        {
-            // rotating sprite
-            let mut render_params = ExampleRenderParams::new(Vector2::new(350, 350), Origin::Center);
-            render_params.crop = Some((32, 32, 32, 32));
-            render_params.rotate = Some((t as f32, Origin::Center));
-            render_params.scale = Some(4.0);
-            graphic_elements.push( GraphicElement {
-                render_stem: RenderStem::Texture { id: characters_id },
-                render_params,
-            })
-        }
-        canvas.draw(&mut shader, &graphic_elements);
+
+        let text_progress = min(LOREM_IPSUM.len(), t);
+        let text = if text_progress >= lorem_ipsum_length {
+            String::from(LOREM_IPSUM)
+        } else {
+            LOREM_IPSUM.chars().take(text_progress).collect::<String>()
+        };
+        let shapes = GraphicElement::Texture(GraphicTexture { texture: shapes_id, x: 0, y: 0, rot: 0.0, crop: None, scale: None});
+        shapes.draw_to_renderer(&mut renderer, &mut render_storage);
+
+        let stick = GraphicElement::Texture(GraphicTexture { texture: stick_id, x: 400, y: 400, rot: 0.0, crop: None, scale: None});
+        stick.draw_to_renderer(&mut renderer, &mut render_storage);
+
+        let sprite = GraphicElement::Texture(GraphicTexture { texture: characters_id, x: 0, y: 400, rot: t as f32 / 3.0, crop: Some((32, 32, 32, 32)), scale: Some((4.0, 4.0))});
+        sprite.draw_to_renderer(&mut renderer, &mut render_storage);
+
+        let text1 = GraphicElement::Text(GraphicText { x: 0, y: 0, font: font_id, width: Some(current_size.0), text, font_size: 50.0});
+        text1.draw_to_renderer(&mut renderer, &mut render_storage);
+
+        render_storage.set_active();
+        let t1 = std::time::Instant::now();
+        renderer.draw();
+        let t2 = std::time::Instant::now();
+
         window.gl_swap_window();
+        let t3 = std::time::Instant::now();
+        compute_us += (t1 - t0).as_micros();
+        draw_us += (t2 - t1).as_micros();
+        swap_us += (t3 - t2).as_micros();
 
-        let _delta_t = ::std::time::Instant::now() - t0;
-        ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 30));
+        frames += 1;
+
+        if (::std::time::Instant::now() - last_time).as_millis() >= 5000 {
+            log::info!("current_fps: {:03}fps, compute={:05}us, draw={:05}us, swap={:05}us", frames / 5, compute_us / frames as u128, draw_us / frames as u128, swap_us / frames as u128);
+            frames = 0;
+            compute_us = 0;
+            draw_us = 0;
+            swap_us = 0;
+            last_time = std::time::Instant::now();
+        }
     }
 }
 
@@ -585,11 +383,12 @@ fn main() {
     gl_attr.set_context_profile(::sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(3, 3);
 
-    // // Enable anti-aliasing
-    // gl_attr.set_multisample_buffers(1);
-    // gl_attr.set_multisample_samples(1);
+    // Enable anti-aliasing
+    gl_attr.set_multisample_buffers(1);
+    gl_attr.set_multisample_samples(1);
     
     let window = video_subsystem.window("Window", 1280, 720)
+        .resizable()
         .opengl()
         .build()
         .unwrap();
@@ -602,13 +401,36 @@ fn main() {
     // ... and we're still using OpenGL 3.3
     debug_assert_eq!(gl_attr.context_version(), (3, 3));
 
-    let canvas = {
-        let (w, h) = window.size();
-        Canvas::new((w, h))
-    };
+    if let Some(e) = sprowl::gl_utils::gl_get_error() {
+        panic!("opengl fatal error {:x} while initializing", e);
+    }
+
+
+    video_subsystem.gl_set_swap_interval(sdl2::video::SwapInterval::Immediate).expect("failed to disable vsync");
+    // now that we are initialized, run the actual program
+
+    log::info!(
+        "OpenGL Vendor: {}",
+        sprowl::gl_utils::gl_get_string(gl::VENDOR).to_string_lossy(),
+    );
+    log::info!(
+        "OpenGL Renderer: {}",
+        sprowl::gl_utils::gl_get_string(gl::RENDERER).to_string_lossy(),
+    );
+    log::info!(
+        "OpenGL Version: {}, GLSL Version: {}",
+        sprowl::gl_utils::gl_get_string(gl::VERSION).to_string_lossy(),
+        sprowl::gl_utils::gl_get_string(gl::SHADING_LANGUAGE_VERSION).to_string_lossy(),
+    );
+    log::info!("OpenGL MAX_TEXTURE_SIZE:             {}", sprowl::gl_utils::gl_get_int(gl::MAX_TEXTURE_SIZE));
+    log::info!("OpenGL MAX_3D_TEXTURE_SIZE:          {}", sprowl::gl_utils::gl_get_int(gl::MAX_3D_TEXTURE_SIZE));
+    log::info!("OpenGL MAX_ARRAY_TEXTURE_LAYERS:     {}", sprowl::gl_utils::gl_get_int(gl::MAX_ARRAY_TEXTURE_LAYERS));
+    log::info!("OpenGL MAX_ELEMENTS_VERTICES:        {}", sprowl::gl_utils::gl_get_int(gl::MAX_ELEMENTS_VERTICES));
+    log::info!("OpenGL MAX_ELEMENTS_INDICES:         {}", sprowl::gl_utils::gl_get_int(gl::MAX_ELEMENTS_INDICES));
+    log::info!("OpenGL MAX_VERTEX_ATTRIBS:           {}", sprowl::gl_utils::gl_get_int(gl::MAX_VERTEX_ATTRIBS));
+    log::info!("OpenGL MAX_UNIFORM_COMPONENTS:       {}", sprowl::gl_utils::gl_get_int(gl::MAX_VERTEX_UNIFORM_COMPONENTS));
+    log::info!("OpenGL MAX_VERTEX_OUTPUT_COMPONENTS: {}", sprowl::gl_utils::gl_get_int(gl::MAX_VERTEX_OUTPUT_COMPONENTS));
 
     log::info!("Initialized OpenGL, running...");
-
-    // now that we are initialized, run the actual program
-    run(&sdl_context, &window, canvas);
+    run(&sdl_context, &window);
 }

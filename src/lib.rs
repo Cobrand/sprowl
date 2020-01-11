@@ -4,27 +4,25 @@
 //! this to an already existing OpenGL context, and
 //! draw textures, text easily.
 //!
-//! You may have to implement your shader yourself, but there are examples
+//! You will have to implement your shader yourself, but there are examples
 //! you can use in shaders as an inspiration.
 //!
-//! If you expected to have to write a single line of OpenGL, then sorry,
-//! this is not for you. However if you are interested in OpenGL's features
-//! but you think current libraries are too limiting and there is nothing
-//! to make the process of drawing a texture easier, then this library may be useful to you.
+//! This library is tailored for my own uses and is heavily unstable. Beware!
 //!
-//! Checkout sdl2-simple example for a more basic example.
+//! Currently, the library is split under 2 big categories:
+//! * A `render_storage` module, which allows you to store textures and fonts.
+//! * As `renderer` and `shader` module, which allow you to print those textures and font.
+//!
+//! While speed is not the main focus of this crate, we still want every device to have a smooth
+//! experience. As such, we use instanced rendering to only call glDrawArrays once, with
+//! only two textures bound: one RGBA, for the usual textures, and one grayscale, for the text.
+//!
+//! Checkout sdl2-simple example for a basic example.
 
-/// Font caching, advanced layouting & rendering
-pub mod font;
+pub mod renderer;
+pub mod render_storage;
 
-// Utility structs and enums. 
-pub mod utils;
-mod texture;
 pub mod gl_utils;
-pub use self::texture::*;
-
-mod canvas;
-pub use self::canvas::*;
 
 mod error;
 pub use self::error::{SprowlError as Error};
@@ -32,14 +30,8 @@ pub use self::error::{SprowlError as Error};
 mod color;
 pub use self::color::*;
 
-/// Everything to pass to the canvas to draw stuff.
-pub mod render;
-
 /// Everything to use shaders and build your own.
 pub mod shader;
-
-// /// A collection of shader samples. Everything from the simplest shader to more complex ones.
-// pub mod shaders;
 
 pub use rusttype;
 pub use smallvec;

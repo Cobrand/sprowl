@@ -1,33 +1,26 @@
 #version 330 core
-in vec2 TexCoords;
+
+in vec2 tex_coords;
+// 0 = texture, 1 = text, 2 = shape,
+flat in uint kind;
+flat in uint layer;
+flat in uint secondary_layer;
+flat in uint effect;
+in vec3 effect_color;
 
 out vec4 color;
 
-uniform sampler2D texture0;
-uniform sampler2D texture1;
-uniform sampler2D texture2;
-uniform sampler2D texture3;
-uniform sampler2D texture4;
-uniform sampler2D texture5;
-uniform sampler2D texture6;
-uniform sampler2D texture7;
-uniform sampler2D texture8;
-uniform sampler2D texture9;
-
-uniform vec2 outline_thickness;
-uniform vec4 outline_color;
-uniform uint effect;
-uniform vec4 effect_color;
+uniform sampler2DArray texture_rgba;
+uniform sampler2DArray texture_gray;
 uniform float t;
-uniform uint is_grayscale;
 
 vec4 blend(vec4 src, vec4 dst) {
     return src * vec4(src.a) + dst * vec4(1.0 - src.a);
 }
 
-vec4 true_tex_color(sampler2D img, vec2 pos) {
-    vec4 color = texture(img, pos);
-    if (is_grayscale == uint(1)) {
+vec4 true_tex_color(sampler2DArray img, vec2 pos, float layer) {
+    vec4 color = texture(img, vec3(pos, layer));
+    if (kind == uint(1)) {
         color = vec4(
             1.0,
             1.0,
@@ -38,58 +31,69 @@ vec4 true_tex_color(sampler2D img, vec2 pos) {
     return color;
 }
 
-float get_border_alpha(sampler2D img, vec2 pos, vec2 outline_thickness) {
+float get_border_alpha(sampler2DArray img, vec2 pos, float layer, vec2 outline_thickness) {
     float v = 0.0;
-    v = max(v, true_tex_color(img, vec2(TexCoords.x - outline_thickness.x, TexCoords.y - outline_thickness.y)).a);
-    v = max(v, true_tex_color(img, vec2(TexCoords.x                      , TexCoords.y - outline_thickness.y)).a);
-    v = max(v, true_tex_color(img, vec2(TexCoords.x + outline_thickness.x, TexCoords.y - outline_thickness.y)).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2(-1.0, -1.0), layer).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2( 0.0, -1.0), layer).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2( 1.0, -1.0), layer).a);
 
-    v = max(v, true_tex_color(img, vec2(TexCoords.x - outline_thickness.x, TexCoords.y                      )).a);
-    v = max(v, true_tex_color(img, vec2(TexCoords.x + outline_thickness.x, TexCoords.y                      )).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2(-1.0,  0.0), layer).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2( 1.0,  0.0), layer).a);
 
-    v = max(v, true_tex_color(img, vec2(TexCoords.x - outline_thickness.x, TexCoords.y + outline_thickness.y)).a);
-    v = max(v, true_tex_color(img, vec2(TexCoords.x                      , TexCoords.y + outline_thickness.y)).a);
-    v = max(v, true_tex_color(img, vec2(TexCoords.x + outline_thickness.x, TexCoords.y + outline_thickness.y)).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2(-1.0,  1.0), layer).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2( 0.0,  1.0), layer).a);
+    v = max(v, true_tex_color(img, pos + outline_thickness * vec2( 1.0,  1.0), layer).a);
     return v;
 }
 
 void main()
 {
-    if (effect == uint(1)) {
+    uint has_glow_effect = effect & uint(2);
+    if (has_glow_effect > uint(0)) {
         // glowing effect
         const vec3 base_color = vec3(ivec3(247, 118, 34)) / 255.0;
         const vec3 half_base_color = base_color / 2.0;
         color = vec4(
             half_base_color * vec3(
-                cos(- 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y) * cos(t / 10.0),
-                cos( 10.0 * TexCoords.x) * sin(10.0 * TexCoords.y),
-                cos( 10.0 * TexCoords.x) * sin(- 10.0 * TexCoords.y)
+                cos(- 10.0 * tex_coords.x) * sin(10.0 * tex_coords.y) * cos(t / 10.0),
+                cos( 10.0 * tex_coords.x) * sin(10.0 * tex_coords.y),
+                cos( 10.0 * tex_coords.x) * sin(- 10.0 * tex_coords.y)
             ) + half_base_color,
             1.0
         );
         return;
     }
-    if (effect == uint(2)) {
+    if (kind == uint(0)) {
+        // texture
+        color = true_tex_color(texture_rgba, tex_coords, float(layer));
+    } else if (kind == uint(1)) {
+        // text
+        color = true_tex_color(texture_gray, tex_coords, float(layer));
+    } else if (kind == uint(2)) {
         // solid colored shape
-        color = effect_color;
-        return;
+        color = vec4(effect_color, 1.0);
     }
 
-    color = true_tex_color(texture0, TexCoords);
-    if (effect == uint(3)) {
-        vec2 noisecoords = vec2(
-            TexCoords.x - (5.0 * cos(t / 30.0) + t) / 1024.0,
-            TexCoords.y - (5.0 * sin(t / 20.0) + t) / 1024.0
-        );
-        vec3 noise = texture(texture1, noisecoords).rgb;
+    uint has_noise_effect = effect & uint(4);
+    if (has_noise_effect > uint(0)) {
+        vec3 noise = texture(texture_rgba, vec3(gl_FragCoord.x / 2048.0 + t / 10000.0, gl_FragCoord.y / 2048.0 + t / 5000.0, secondary_layer)).rgb;
         const vec3 gold = vec3(ivec3(255, 208, 0)) / 255.0;
-        color.rgb = mix(effect_color.rgb, gold, vec3(noise.g, noise.b, (noise.g+noise.b) / 2.0));
+        color = vec4(
+            mix(effect_color.rgb, gold, vec3(noise.g, noise.b, (noise.g+noise.b) / 2.0)),
+            color.a
+        );
     }
-    if (outline_color.a == 0.0) {
-        return;
-    }
-    float v = get_border_alpha(texture0, TexCoords, outline_thickness);
-    if (v > 0.0) {
-        color = blend(color, vec4(outline_color.rgb, v));
+
+    uint has_border_effect = effect & uint(8);
+    if (has_border_effect > uint(0)) {
+        float v = 0.0;
+        if (kind == uint(1)) {
+            v = get_border_alpha(texture_gray, tex_coords, float(layer), vec2(1.0, 1.0) / 2048.0);
+        } else {
+            v = get_border_alpha(texture_rgba, tex_coords, float(layer), vec2(1.0, 1.0) / 1024.0);
+        }
+        if (v > 0.0) {
+            color = blend(color, vec4(0.0, 0.0, 0.0, v));
+        }
     }
 }

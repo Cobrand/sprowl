@@ -29,3 +29,12 @@ pub fn gl_get_string(name: GLenum) -> &'static CStr {
         CStr::from_ptr(gl::GetString(name) as *const _)
     }
 }
+
+pub fn gl_get_error() -> Option<GLenum> {
+    let r = unsafe { gl::GetError() };
+    if r == 0 {
+        None
+    } else {
+        Some(r)
+    }
+}
