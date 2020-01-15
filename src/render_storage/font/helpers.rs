@@ -27,7 +27,7 @@ impl<'a, 't> AdvancedLayoutIter<'a, 't> {
             original_str: t,
             scale: FontScale::uniform(size),
             start,
-            offset: Vector2::new(0.0, 0.0),
+            offset: start,
             last_glyph: None,
             max_width
         }
@@ -53,7 +53,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
         }
         let mut origin = self.start;
         let mut begin: Option<usize> = None;
-                
+
         let v_metrics = self.font.v_metrics(self.scale);
         let character_height = v_metrics.ascent - v_metrics.descent;
         let mut max_i = 0;
@@ -61,7 +61,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
             max_i = i;
             if ! c.is_whitespace() && begin.is_none() {
                 // if we haven't begun a word, set begin to Some(_)
-                origin = self.start + self.offset;
+                origin = self.offset;
                 begin = Some(i);
             };
             let g = self.font.glyph(c).scaled(self.scale);
@@ -79,7 +79,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
                     let word_pos = WordPos {
                         word: &self.original_str[begin..end],
                         origin,
-                        size: (self.start + self.offset) + Vector2::new(0.0, character_height) - origin,
+                        size: self.offset + Vector2::new(0.0, character_height) - origin,
                     };
                     if c == '\n' {
                         // special case: we end the word with a \n, so we need to go to the enxt line.
@@ -100,7 +100,9 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
             }
             self.offset.x += g.h_metrics().advance_width;
             if self.offset.x >= self.max_width as f32 {
-                let word_size = self.start.x + self.offset.x - origin.x;
+                // next word is going too far,
+                // go to the next line
+                let word_size = self.offset.x - origin.x;
                 self.offset.y += character_height + v_metrics.line_gap;
                 self.offset.x = self.start.x + word_size;
                 origin = Vector2::new(self.start.x, self.offset.y);
