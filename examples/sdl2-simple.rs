@@ -93,7 +93,7 @@ impl GraphicElement {
                         ).collect::<Vec<WordPos<'_>>>();
                         for WordPos { word, origin, .. } in font_layout {
                             let word_layout = font.word_to_draw_call(
-                                &mut texture, word, t.font_size, origin.cast::<i32>().unwrap()
+                                &mut texture, word, t.font_size, origin
                             );
                             render_word(renderer, &word_layout, (max_w, max_h));
                         };
@@ -117,15 +117,15 @@ pub fn render_word(renderer: &mut Renderer<ExampleUniform>, word_layout: &[FontS
         let crop = Some((
             // 1 represents the padding for borders: we need the characters to be 1 pixel wider
             // to be able to show an outline.
-            (character.source_crop.0 - 1) as f32 / max_w as f32,
-            (character.source_crop.1 - 1) as f32 / max_h as f32,
-            (character.source_crop.2 + 2) as f32 / max_w as f32,
-            (character.source_crop.3 + 2) as f32 / max_h as f32,
+            (character.source_crop.0 - 1f32) as f32 / max_w as f32,
+            (character.source_crop.1 - 1f32) as f32 / max_h as f32,
+            (character.source_crop.2 + 2f32) as f32 / max_w as f32,
+            (character.source_crop.3 + 2f32) as f32 / max_h as f32,
         ));
         renderer.add_elem(&VertexData {
-            position: Vector2::new((character.dest_origin.x - 1) as f32, (character.dest_origin.y - 1) as f32),
-            size: Vector2::new((w + 2) as f32, (h + 2) as f32),
-            rot_pivot: Vector2::new((w + 2) as f32 / 2.0, (h + 2) as f32 / 2.0),
+            position: Vector2::new((character.dest_origin.x - 1f32) as f32, (character.dest_origin.y - 1f32) as f32),
+            size: Vector2::new((w + 2f32) as f32, (h + 2f32) as f32),
+            rot_pivot: Vector2::new((w + 2f32) as f32 / 2.0, (h + 2f32) as f32 / 2.0),
             rot: 0.0,
             crop,
             kind: 1,
@@ -159,8 +159,8 @@ pub struct GraphicTexture {
 
 #[derive(Debug)]
 pub struct GraphicText {
-    pub x: i32,
-    pub y: i32,
+    pub x: f32,
+    pub y: f32,
     pub width: Option<u32>,
     pub text: String,
     pub font_size: f32,
@@ -346,7 +346,7 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window) {
         let sprite = GraphicElement::Texture(GraphicTexture { texture: characters_id, x: 0, y: 400, rot: t as f32 / 3.0, crop: Some((32, 32, 32, 32)), scale: Some((4.0, 4.0))});
         sprite.draw_to_renderer(&mut renderer, &mut render_storage);
 
-        let text1 = GraphicElement::Text(GraphicText { x: 0, y: 0, font: font_id, width: Some(current_size.0), text, font_size: 50.0});
+        let text1 = GraphicElement::Text(GraphicText { x: 0.0, y: 0.0, font: font_id, width: Some(current_size.0), text, font_size: 50.0});
         text1.draw_to_renderer(&mut renderer, &mut render_storage);
 
         render_storage.set_active();

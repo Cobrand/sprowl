@@ -12,8 +12,9 @@ pub struct FontRenderer {
 }
 
 pub struct FontStemDrawCall {
-    pub source_crop: (i32, i32, u32, u32),
-    pub dest_origin: Vector2<i32>,
+    // in pixels
+    pub source_crop: (f32, f32, f32, f32),
+    pub dest_origin: Vector2<f32>,
     pub texture_layer: TextureArrayLayer,
     pub character_index: usize,
 }
@@ -44,11 +45,11 @@ impl FontRenderer {
         self.texture_layer
     }
 
-    pub fn word_to_draw_call(&mut self, tex_ref: &mut TextureArrayLayerRef<'_>, text: &str, font_size: f32, origin: Vector2<i32>) -> Vec<FontStemDrawCall> {
+    pub fn word_to_draw_call(&mut self, tex_ref: &mut TextureArrayLayerRef<'_>, text: &str, font_size: f32, origin: Vector2<f32>) -> Vec<FontStemDrawCall> {
         let scale = FontScale::uniform(font_size);
 
-        let advance = self.font().v_metrics(scale).ascent.round() as i32;
-        let glyphs = self.font.layout(text, scale, rusttype::point(origin.x as f32, origin.y as f32)).enumerate().collect::<Vec<_>>();
+        let advance = self.font().v_metrics(scale).ascent;
+        let glyphs = self.font.layout(text, scale, rusttype::point(origin.x, origin.y)).enumerate().collect::<Vec<_>>();
 
         let (tex_w, tex_h) = tex_ref.stats().size();
         let r = self.font_cache.cache_glyphs(glyphs.iter().map(|(_, c)| c), |rect, data| {
@@ -64,15 +65,15 @@ impl FontRenderer {
         let mut results: Vec<FontStemDrawCall> = Vec::with_capacity(glyphs.len());
         for (i, glyph) in &glyphs {
             if let Ok(Some((uv_rect, screen_rect))) = self.font_cache.rect_for(glyph) {
-                let source_crop: (i32, i32, u32, u32) = (
-                    (uv_rect.min.x * tex_w) as i32,
-                    (uv_rect.min.y * tex_h) as i32,
-                    (uv_rect.width() * tex_w) as u32,
-                    (uv_rect.height() * tex_h) as u32, 
+                let source_crop = (
+                    (uv_rect.min.x * tex_w),
+                    (uv_rect.min.y * tex_h),
+                    (uv_rect.width() * tex_w),
+                    (uv_rect.height() * tex_h), 
                 );
                 results.push(FontStemDrawCall {
                     source_crop,
-                    dest_origin: Vector2::new(screen_rect.min.x, screen_rect.min.y + advance),
+                    dest_origin: Vector2::new(screen_rect.min.x as f32, screen_rect.min.y as f32 + advance),
                     texture_layer: self.texture_layer,
                     character_index: *i,
                 });

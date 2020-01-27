@@ -197,9 +197,6 @@ impl<U: Uniform> Renderer<U> {
     pub fn add_elem<E: AsVertexData>(&mut self, e: &E) {
         let added_instances = e.add_vertex_data(&mut self.temp_instanced_vb);
         self.instance_count += added_instances as usize;
-        // e.add_quad_data(&mut self.temp_quad_vb);
-        // e.add_instanced_data(&mut self.temp_instanced_vb);
-        // self.instance_count += 1;
     }
 
     pub fn draw(&mut self) {
