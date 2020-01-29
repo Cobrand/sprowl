@@ -45,11 +45,20 @@ impl FontRenderer {
         self.texture_layer
     }
 
-    pub fn word_to_draw_call(&mut self, tex_ref: &mut TextureArrayLayerRef<'_>, text: &str, font_size: f32, origin: Vector2<f32>) -> Vec<FontStemDrawCall> {
+    pub fn y_length(&self, font_size: f32) -> f32 {
         let scale = FontScale::uniform(font_size);
 
-        let advance = self.font().v_metrics(scale).ascent;
-        let glyphs = self.font.layout(text, scale, rusttype::point(origin.x, origin.y)).enumerate().collect::<Vec<_>>();
+        let v_metrics = self.font().v_metrics(scale);
+        v_metrics.ascent - v_metrics.descent
+    }
+
+    pub fn word_to_draw_call(&mut self, tex_ref: &mut TextureArrayLayerRef<'_>, text: &str, font_size: f32) -> Vec<FontStemDrawCall> {
+        let scale = FontScale::uniform(font_size);
+
+        let v_metrics = self.font().v_metrics(scale);
+        // represents the distance between the top most pixel possible for this font, and the baseline
+        let advance = v_metrics.ascent;
+        let glyphs = self.font.layout(text, scale, rusttype::point(0.0, 0.0)).enumerate().collect::<Vec<_>>();
 
         let (tex_w, tex_h) = tex_ref.stats().size();
         let r = self.font_cache.cache_glyphs(glyphs.iter().map(|(_, c)| c), |rect, data| {

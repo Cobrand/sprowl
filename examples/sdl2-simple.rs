@@ -93,16 +93,16 @@ impl GraphicElement {
                         ).collect::<Vec<WordPos<'_>>>();
                         for WordPos { word, origin, .. } in font_layout {
                             let word_layout = font.word_to_draw_call(
-                                &mut texture, word, t.font_size, origin
+                                &mut texture, word, t.font_size
                             );
-                            render_word(renderer, &word_layout, (max_w, max_h));
+                            render_word(renderer, &word_layout, origin, (max_w, max_h));
                         };
                     },
                     None => {
                         let word_layout = font.word_to_draw_call(
-                            &mut texture, &t.text, t.font_size, Vector2::new(t.x, t.y)
+                            &mut texture, &t.text, t.font_size
                         );
-                        render_word(renderer, &word_layout, (max_w, max_h));
+                        render_word(renderer, &word_layout, Vector2::new(t.x, t.y), (max_w, max_h));
                     }
                 };
             },
@@ -110,7 +110,7 @@ impl GraphicElement {
     }
 }
 
-pub fn render_word(renderer: &mut Renderer<ExampleUniform>, word_layout: &[FontStemDrawCall], texture_layer_dims: (u32, u32)) {
+pub fn render_word(renderer: &mut Renderer<ExampleUniform>, word_layout: &[FontStemDrawCall], origin: Vector2<f32>, texture_layer_dims: (u32, u32)) {
     let (max_w, max_h) = texture_layer_dims;
     for character in word_layout {
         let (w, h) = (character.source_crop.2, character.source_crop.3);
@@ -123,7 +123,7 @@ pub fn render_word(renderer: &mut Renderer<ExampleUniform>, word_layout: &[FontS
             (character.source_crop.3 + 2f32) as f32 / max_h as f32,
         ));
         renderer.add_elem(&VertexData {
-            position: Vector2::new((character.dest_origin.x - 1f32) as f32, (character.dest_origin.y - 1f32) as f32),
+            position: Vector2::new((origin.x + character.dest_origin.x - 1f32) as f32, (origin.y + character.dest_origin.y - 1f32) as f32),
             size: Vector2::new((w + 2f32) as f32, (h + 2f32) as f32),
             rot_pivot: Vector2::new((w + 2f32) as f32 / 2.0, (h + 2f32) as f32 / 2.0),
             rot: 0.0,
