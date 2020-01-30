@@ -97,8 +97,9 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
                 } else {
                     self.offset.x += g.h_metrics().advance_width;
                 }
+            } else {
+                self.offset.x += g.h_metrics().advance_width;
             }
-            self.offset.x += g.h_metrics().advance_width;
             if self.offset.x >= self.max_width as f32 {
                 // next word is going too far,
                 // go to the next line
