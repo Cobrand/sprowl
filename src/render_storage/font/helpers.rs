@@ -100,7 +100,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
             } else {
                 self.offset.x += g.h_metrics().advance_width;
             }
-            if self.offset.x >= self.max_width as f32 {
+            if self.offset.x >= self.start.x + self.max_width as f32 {
                 // next word is going too far,
                 // go to the next line
                 let word_size = self.offset.x - origin.x;
