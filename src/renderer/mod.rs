@@ -148,6 +148,13 @@ impl RendererBuilder {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
+        unsafe {
+            // disable multisampling (fixes texture bleeding???)
+            // https://stackoverflow.com/questions/6488131/artifacts-when-enabling-4x-msaa-anti-aliasing-on-ipad-ios/6488465#6488465
+            gl::Disable(gl::MULTISAMPLE);
+            // gl::Disable(gl::MULTISAMPLE_ARB);
+        }
+
         Renderer {
             vao: self.vao,
             instanced_vbo: self.instanced_vbo,

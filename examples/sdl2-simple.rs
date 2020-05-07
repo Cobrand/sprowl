@@ -292,6 +292,7 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window) {
     log::info!("Running main loop...");
     let mut last_time = std::time::Instant::now();
     'running: for t in 0.. {
+        log::info!("OpenGL Multisampling:                {}", unsafe { gl::IsEnabled(gl::MULTISAMPLE) });
         if let Some(e) = sprowl::gl_utils::gl_get_error() {
             panic!("opengl fatal error {}", e);
         }
@@ -382,10 +383,6 @@ fn main() {
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(::sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(3, 3);
-
-    // Enable anti-aliasing
-    gl_attr.set_multisample_buffers(1);
-    gl_attr.set_multisample_samples(1);
     
     let window = video_subsystem.window("Window", 1280, 720)
         .resizable()
@@ -393,8 +390,17 @@ fn main() {
         .build()
         .unwrap();
 
+
     let _ctx = window.gl_create_context().unwrap();
     gl::load_with(|name| video_subsystem.gl_get_proc_address(name) as *const _);
+    println!("MS {} {}", gl_attr.multisample_buffers(), gl_attr.multisample_samples());
+    // Enable anti-aliasing
+    gl_attr.set_multisample_buffers(0);
+    gl_attr.set_multisample_samples(0);
+
+    // unsafe { gl::Disable(gl::MULTISAMPLE); };
+
+    println!("MS {} {}", gl_attr.multisample_buffers(), gl_attr.multisample_samples());
     
     // Yes, we're still using the Core profile
     debug_assert_eq!(gl_attr.context_profile(), sdl2::video::GLProfile::Core);
@@ -430,6 +436,9 @@ fn main() {
     log::info!("OpenGL MAX_VERTEX_ATTRIBS:           {}", sprowl::gl_utils::gl_get_int(gl::MAX_VERTEX_ATTRIBS));
     log::info!("OpenGL MAX_UNIFORM_COMPONENTS:       {}", sprowl::gl_utils::gl_get_int(gl::MAX_VERTEX_UNIFORM_COMPONENTS));
     log::info!("OpenGL MAX_VERTEX_OUTPUT_COMPONENTS: {}", sprowl::gl_utils::gl_get_int(gl::MAX_VERTEX_OUTPUT_COMPONENTS));
+    log::info!("OpenGL Multisampling:                {}", unsafe { gl::IsEnabled(gl::MULTISAMPLE) });
+    // log::info!("OpenGL Multisampling ARB:                {}", unsafe { gl::IsEnabled(gl::MULTISAMPLE_ARB) });
+    println!("MS {} {}", gl_attr.multisample_buffers(), gl_attr.multisample_samples());
 
     log::info!("Initialized OpenGL, running...");
     run(&sdl_context, &window);

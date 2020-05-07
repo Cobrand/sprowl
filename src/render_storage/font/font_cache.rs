@@ -386,11 +386,11 @@ pub enum CacheReadErr {
 
 impl std::fmt::Display for CacheReadErr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", std::error::Error::description(self))
+        write!(f, "{}", self.description())
     }
 }
 
-impl std::error::Error for CacheReadErr {
+impl CacheReadErr {
     fn description(&self) -> &str {
         match *self {
             CacheReadErr::GlyphNotCached => "Glyph not cached",
@@ -410,10 +410,10 @@ pub enum CacheWriteErr {
 }
 impl std::fmt::Display for CacheWriteErr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", std::error::Error::description(self))
+        write!(f, "{}", self.description())
     }
 }
-impl std::error::Error for CacheWriteErr {
+impl CacheWriteErr {
     fn description(&self) -> &str {
         match *self {
             CacheWriteErr::GlyphTooLarge => "Glyph too large",
