@@ -117,7 +117,7 @@ impl<'a, 't> Iterator for AdvancedLayoutIter<'a, 't> {
             Some(WordPos {
                 word: &self.original_str[begin..end],
                 origin,
-                size: (self.start + self.offset) + Vector2::new(0.0, character_height) - origin,
+                size: self.offset + Vector2::new(0.0, character_height) - origin,
             })
         } else {
             // end of the string, and we had to beginning (it was a whitespace of something of the like
