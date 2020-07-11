@@ -4,7 +4,7 @@ pub mod font;
 use font::FontRenderer;
 use texture::{Texture2DArray, TextureFormat, TextureArrayLayer, TextureArrayLayerRef, TextureLayerStats};
 
-use rusttype::FontCollection;
+use rusttype::Font;
 use image::GenericImageView;
 
 use hashbrown::HashMap;
@@ -50,8 +50,7 @@ impl RenderStorage {
     ///
     /// Panics if there's more than one font
     pub fn add_font_from_bytes(&mut self, bytes: &'static [u8]) -> FontId {
-        let collection = FontCollection::from_bytes(bytes).expect("wrong font added from static bytes");
-        let font = collection.into_font().expect("fatal: collection consists of more than one font"); // only succeeds if collection consists of one font
+        let font = Font::try_from_bytes(bytes).expect("wrong font added from static bytes");
 
         let grayscale_layer = self.texture_array_grayscale.add_empty_texture(2048, 2048);
 
