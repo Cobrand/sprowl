@@ -57,7 +57,7 @@ impl FontRenderer {
 
         let v_metrics = self.font().v_metrics(scale);
         // represents the distance between the top most pixel possible for this font, and the baseline
-        let advance = v_metrics.ascent;
+        let ascent = v_metrics.ascent;
         let glyphs = self.font.layout(text, scale, rusttype::point(0.0, 0.0)).enumerate().collect::<Vec<_>>();
 
         let (tex_w, tex_h) = tex_ref.stats().size();
@@ -82,7 +82,7 @@ impl FontRenderer {
                 );
                 results.push(FontStemDrawCall {
                     source_crop,
-                    dest_origin: Vector2::new(screen_rect.min.x as f32, screen_rect.min.y as f32 + advance),
+                    dest_origin: Vector2::new(screen_rect.min.x as f32, screen_rect.min.y as f32 + ascent),
                     texture_layer: self.texture_layer,
                     character_index: *i,
                 });
