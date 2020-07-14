@@ -5,7 +5,7 @@ use sprowl::{
     Color,
     shader::{Shader, Uniform},
     renderer::{Renderer, RendererBuilder, AsVertexData},
-    render_storage::{RenderStorage, texture::TextureArrayLayer, font::{AdvancedLayoutIter, WordPos, FontStemDrawCall}, TextureKind, FontId},
+    render_storage::{RenderStorage, texture::TextureArrayLayer, font::{AdvancedLayout, WordPos, FontStemDrawCall}, TextureKind, FontId},
 };
 use std::mem::transmute;
 use std::cmp::min;
@@ -84,13 +84,14 @@ impl GraphicElement {
                 let (font, mut texture) = render_storage.get_font_with_texture(t.font).unwrap();
                 match t.width {
                     Some(max_width) => {
-                        let font_layout = AdvancedLayoutIter::new(
+                        let font_layout = AdvancedLayout::new_str(
                             font.font(),
                             &t.text,
                             t.font_size,
                             Vector2::new(t.x as f32, t.y as f32),
+                            t.center,
                             max_width
-                        ).collect::<Vec<WordPos<'_>>>();
+                        ).iter().cloned().collect::<Vec<WordPos<'_>>>();
                         for WordPos { word, origin, .. } in font_layout {
                             let word_layout = font.word_to_draw_call(
                                 &mut texture, word, t.font_size
@@ -165,6 +166,7 @@ pub struct GraphicText {
     pub text: String,
     pub font_size: f32,
     pub font: FontId,
+    pub center: i8,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -332,12 +334,13 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window) {
             }
         }
 
-        let text_progress = min(LOREM_IPSUM.len(), t);
-        let text = if text_progress >= lorem_ipsum_length {
-            String::from(LOREM_IPSUM)
-        } else {
-            LOREM_IPSUM.chars().take(text_progress).collect::<String>()
-        };
+        let text_progress = min(LOREM_IPSUM.len(), t / 4);
+        // let text = if text_progress >= lorem_ipsum_length {
+        //     String::from(LOREM_IPSUM)
+        // } else {
+        //     LOREM_IPSUM.chars().take(text_progress).collect::<String>()
+        // };
+        let text = format!("prout");
         let shapes = GraphicElement::Texture(GraphicTexture { texture: shapes_id, x: 0, y: 0, rot: 0.0, crop: None, scale: None});
         shapes.draw_to_renderer(&mut renderer, &mut render_storage);
 
@@ -347,8 +350,20 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window) {
         let sprite = GraphicElement::Texture(GraphicTexture { texture: characters_id, x: 0, y: 400, rot: t as f32 / 3.0, crop: Some((32, 32, 32, 32)), scale: Some((4.0, 4.0))});
         sprite.draw_to_renderer(&mut renderer, &mut render_storage);
 
-        let text1 = GraphicElement::Text(GraphicText { x: 0.0, y: 0.0, font: font_id, width: Some(current_size.0), text, font_size: 50.0});
+        let text1 = GraphicElement::Text(GraphicText { x: 0.0, y: 0.0, font: font_id, width: Some(current_size.0), text, font_size: 50.0, center: -1});
         text1.draw_to_renderer(&mut renderer, &mut render_storage);
+
+        let text2 = GraphicElement::Text(GraphicText {
+            x: current_size.0 as f32 / 4.0, y: 50.0, font: font_id, width: Some(current_size.0 / 2),
+            text:format!("Salut tout le monde comment ça va aujourd'hui"), font_size: 60.0, center: 0
+        });
+        text2.draw_to_renderer(&mut renderer, &mut render_storage);
+
+        let text3 = GraphicElement::Text(GraphicText {
+            x: current_size.0 as f32 / 4.0, y: 350.0, font: font_id, width: Some(current_size.0 / 2),
+            text:format!("WAWAWA\nSALUT LES POTES\nWAW WAW\n\nXOXOXO WAW WAW WAW XOXOXO"), font_size: 60.0, center: 1
+        });
+        text3.draw_to_renderer(&mut renderer, &mut render_storage);
 
         render_storage.set_active();
         let t1 = std::time::Instant::now();
