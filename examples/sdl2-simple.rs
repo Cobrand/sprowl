@@ -43,6 +43,7 @@ impl GraphicElement {
             },
             GraphicElement::Texture(t) => {
                 let stats = render_storage.get_stats(t.texture);
+                let (scale_x, scale_y) = t.scale.unwrap_or((1.0, 1.0));
                 let (width, height) = match t.crop {
                     Some((_, _, w, h,)) => (w, h),
                     None => (stats.width, stats.height),
@@ -68,8 +69,8 @@ impl GraphicElement {
                 };
                 renderer.add_elem(&VertexData {
                     position: Vector2::new(t.x as f32, t.y as f32),
-                    size: Vector2::new(width as f32, height as f32),
-                    rot_pivot: Vector2::new(width as f32 / 2.0, height as f32 / 2.0),
+                    size: Vector2::new(width as f32 * scale_x, height as f32 * scale_y),
+                    rot_pivot: Vector2::new(scale_x * width as f32 / 2.0, scale_y * height as f32 / 2.0),
                     rot: t.rot,
                     crop: Some(crop),
                     kind: 0,
@@ -347,7 +348,7 @@ fn run(sdl_context: &sdl2::Sdl, window: &sdl2::video::Window) {
         let stick = GraphicElement::Texture(GraphicTexture { texture: stick_id, x: 400, y: 400, rot: 0.0, crop: None, scale: None});
         stick.draw_to_renderer(&mut renderer, &mut render_storage);
 
-        let sprite = GraphicElement::Texture(GraphicTexture { texture: characters_id, x: 0, y: 400, rot: t as f32 / 3.0, crop: Some((32, 32, 32, 32)), scale: Some((4.0, 4.0))});
+        let sprite = GraphicElement::Texture(GraphicTexture { texture: characters_id, x: 0, y: 400, rot: t as f32 / 3.0, crop: Some((32, 32, 32, 32)), scale: Some((8.0, 8.0))});
         sprite.draw_to_renderer(&mut renderer, &mut render_storage);
 
         let text1 = GraphicElement::Text(GraphicText { x: 0.0, y: 0.0, font: font_id, width: Some(current_size.0), text, font_size: 50.0, center: -1});
