@@ -63,6 +63,28 @@ impl<T: ColorType> Color<T> {
     }
 }
 
+impl<T: ColorType> From<(T, T, T)> for Color<T> {
+    fn from((r, g, b): (T, T, T)) -> Self {
+        Color {
+            r,
+            g,
+            b,
+            a: T::COLOR_MAX_VALUE,
+        }
+    }
+}
+
+impl<T: ColorType> From<(T, T, T, T)> for Color<T> {
+    fn from((r, g, b, a): (T, T, T, T)) -> Self {
+        Color {
+            r,
+            g,
+            b,
+            a,
+        }
+    }
+}
+
 impl Color<u8> {
     pub fn to_color_f32(self) -> Color<f32> {
         Color {
