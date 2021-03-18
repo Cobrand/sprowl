@@ -94,6 +94,62 @@ impl<U: Uniform> Shader<U> {
         Ok(())
     }
 
+    pub fn set_float_array(&mut self, name: U, values: &[f32]) {
+        if values.len() == 0 {
+            return;
+        }
+        unsafe {
+            let ptr = values.as_ptr();
+            gl::Uniform1fv(
+                self.uniforms.get(&name).cloned().expect("uniform location was not initialized"),
+                values.len() as c_int,
+                ptr
+            )
+        }
+    }
+
+    pub fn set_vec2_array(&mut self, name: U, values: &[Vector2<f32>]) {
+        if values.len() == 0 {
+            return;
+        }
+        unsafe {
+            let ptr = values.as_ptr() as *const f32;
+            gl::Uniform2fv(
+                self.uniforms.get(&name).cloned().expect("uniform location was not initialized"),
+                values.len() as c_int,
+                ptr
+            )
+        }
+    }
+
+    pub fn set_vec3_array(&mut self, name: U, values: &[Vector3<f32>]) {
+        if values.len() == 0 {
+            return;
+        }
+        unsafe {
+            let ptr = values.as_ptr() as *const f32;
+            gl::Uniform3fv(
+                self.uniforms.get(&name).cloned().expect("uniform location was not initialized"),
+                values.len() as c_int,
+                ptr
+            )
+        }
+    }
+
+    pub fn set_vec4_array(&mut self, name: U, values: &[Vector4<f32>]) {
+        if values.len() == 0 {
+            return;
+        }
+        unsafe {
+            let ptr = values.as_ptr() as *const f32;
+            gl::Uniform4fv(
+                self.uniforms.get(&name).cloned().expect("uniform location was not initialized"),
+                values.len() as c_int,
+                ptr
+            )
+        }
+    }
+
     /// Give a uniform a new uint value.
     pub fn set_uint(&mut self, name: U, value: GLuint) {
         unsafe {
