@@ -38,6 +38,16 @@ impl<T: ColorType> Color<T> {
         Color {r, g, b, a: T::COLOR_MAX_VALUE}
     }
 
+    pub fn with_alpha(mut self, a: T) -> Color<T> {
+        self.a = a;
+        self
+    }
+
+    pub fn with_opaque(mut self) -> Color<T> {
+        self.a = T::COLOR_MAX_VALUE;
+        self
+    }
+
     pub fn rgb(self) -> (T, T, T) {
         (self.r, self.g, self.b)
     }
